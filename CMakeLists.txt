@@ -33,5 +33,4 @@ else()
     add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-add_subdirectory(plugin)
-add_subdirectory(test)
+add_subdirectory(app)

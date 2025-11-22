@@ -1,9 +1,9 @@
 #include <gtest/gtest.h>
-#include <ArtOfMixingVisualizer/PluginProcessor.h>
+#include <ArtOfMixingVisualizer/MainComponent.h>
 
 namespace audio_plugin_test {
-TEST(ArtOfMixingVisualizerAudioProcessor, Foo) {
-    ArtOfMixingVisualizerAudioProcessor processor{};
+TEST(MainComponent, Foo) {
+    MainComponent component{};
     ASSERT_FALSE(true);
 }
 }
