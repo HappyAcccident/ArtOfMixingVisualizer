@@ -8,14 +8,17 @@ void MainComponent::paint (juce::Graphics& g)
 
     g.setFont (juce::FontOptions (16.0f));
     g.setColour (juce::Colours::white);
-    // g.drawText (this->getTransportSourceState() + this->getState(), getLocalBounds(), juce::Justification::centred, true);
+    g.drawText (/*this->getTransportSourceState() +*/ this->getState(), getLocalBounds(), juce::Justification::centred, true);
 }
 
 void MainComponent::resized()
 {
-    openButton.setBounds(getWidth()/50, 1*getHeight()/25, getWidth()/6, 20);
-    playButton.setBounds(getWidth()/50, 2*getHeight()/25, getWidth()/6, 20);
-    stopButton.setBounds(getWidth()/50, 3*getHeight()/25, getWidth()/6, 20);
+    for (auto instrument : instruments)
+    {
+        openButtons[instrument]->setBounds(getWidth()/50, (int(instrument)+1)*getHeight()/25, getWidth()/6, 20);
+    }
+    playButton.setBounds(getWidth()/50, 6*getHeight()/25, getWidth()/6, 20);
+    stopButton.setBounds(getWidth()/50, 7*getHeight()/25, getWidth()/6, 20);
 }
 
 void MainComponent::timerCallback()

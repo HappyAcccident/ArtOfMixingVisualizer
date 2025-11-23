@@ -18,9 +18,13 @@ public:
     MainComponent()
         : state (Stopped)
     {
-        addAndMakeVisible(&openButton);
-        openButton.setButtonText ("Open...");
-        openButton.onClick = [this] {openButtonClicked();};
+        for(auto instrument : instruments)
+        {
+            openButtons[instrument] = std::make_unique<juce::TextButton>();
+            addAndMakeVisible(openButtons[instrument].get());
+            openButtons[instrument]->setButtonText("Choose " + instrumentToString(instrument) + "...");
+            openButtons[instrument]->onClick = [this, instrument] {openButtonClicked(instrument);};
+        }
 
         addAndMakeVisible(&playButton);
         playButton.setButtonText ("Play");
@@ -38,8 +42,13 @@ public:
         startTimerHz(60);
 
         formatManager.registerBasicFormats();
-        transportSource.addChangeListener(this);
-        setAudioChannels(0, 2);
+        for(auto& source : transportSources)
+        {
+            source = std::make_unique<juce::AudioTransportSource>();
+            source->addChangeListener(this);
+            mixer.addInputSource(source.get(), true);
+        }
+        setAudioChannels(0, 10);
     }
 
     //==============================================================================
@@ -49,50 +58,53 @@ public:
 
     void getNextAudioBlock(const juce::AudioSourceChannelInfo& bufferToFill) override
     {
-        if (readerSource.get() == nullptr)
+        if (!std::any_of(readerSources.begin(), readerSources.end(),
+                 [](const auto& rs){ return rs != nullptr; }))
         {
             bufferToFill.clearActiveBufferRegion();
             return;
         }
-        transportSource.getNextAudioBlock(bufferToFill);
+        mixer.getNextAudioBlock(bufferToFill);
     }
 
     void prepareToPlay(int samplesPerBlockExpected, double sampleRate) override
     {
-        transportSource.prepareToPlay(samplesPerBlockExpected, sampleRate);
+        mixer.prepareToPlay(samplesPerBlockExpected, sampleRate);
     }
 
     void releaseResources() override
     {
-        transportSource.releaseResources();
+        mixer.releaseResources();
     }
 
     void changeListenerCallback(juce::ChangeBroadcaster* source) override
     {
-        if (source == &transportSource)
+        for (auto& transportSource : transportSources)
         {
-            if (transportSource.isPlaying())
-            {
-                changeState(Playing);
-            }
-            else if ((state == Stopping) || (state == Playing))
-            {
-                changeState(Stopped);
-            }
-            else if (state == Pausing)
-            {
-                changeState(Paused);
-            }
+                if (transportSource->isPlaying())
+                {
+                    changeState(Playing);
+                    return;
+                }
+        }
+
+        if ((state == Stopping) || (state == Playing))
+        {
+            changeState(Stopped);
+        }
+        else if (state == Pausing)
+        {
+            changeState(Paused);
         }
     }
 
-    juce::String getTransportSourceState()
-    {
-        if (transportSource.isPlaying())
-            return "True";
-        else
-            return "False";
-    }
+    // juce::String getTransportSourceState(Instrument instrument)
+    // {
+    //     if (transportSources[Instrument].isPlaying())
+    //         return "True";
+    //     else
+    //         return "False";
+    // }
 
     juce::String getState()
     {
@@ -121,6 +133,36 @@ private:
         Stopping
     };
 
+    enum Instrument
+    {
+        Violin_I,
+        Violin_II,
+        Viola,
+        Chello_I,
+        Chello_II
+    };
+
+    std::vector<Instrument> instruments = {Violin_I,
+                                           Violin_II,
+                                           Viola,
+                                           Chello_I,
+                                           Chello_II};
+    
+    static juce::String instrumentToString(Instrument instrument)
+    {
+        switch (instrument)
+        {
+            case Instrument::Violin_I:   return "Violin I";
+            case Instrument::Violin_II:   return "Violin II";
+            case Instrument::Viola:   return "Violia";
+            case Instrument::Chello_I:   return "Chello I";
+            case Instrument::Chello_II:   return "Chello II";
+        }
+
+        jassertfalse; // catches invalid values in debug builds
+        return "Unknown";
+    }
+
     void changeState(TransportState newState)
     {
         if (state != newState)
@@ -131,37 +173,49 @@ private:
                 case Stopped:
                     playButton.setButtonText("Play");
                     stopButton.setEnabled(false);
-                    transportSource.setPosition(0.0);
+                    for (auto& transportSource : transportSources)
+                    {
+                        transportSource->setPosition(0.0);
+                    }
                     break;
                 case Starting:
-                    transportSource.start();
+                    for (auto& transportSource : transportSources)
+                    {
+                        transportSource->start();
+                    }
                 case Playing:
                     playButton.setButtonText ("Pause");
                     stopButton.setEnabled(true);
                     break;
                 case Pausing:
-                    transportSource.stop();
+                    for (auto& transportSource : transportSources)
+                    {
+                        transportSource->stop();
+                    }
                     break;
                 case Paused:
                     playButton.setButtonText("Resume");
                     break;
                 case Stopping:
-                    transportSource.stop();
+                    for (auto& transportSource : transportSources)
+                    {
+                        transportSource->stop();
+                    }
                     break;
             }
         }
     }
 
-    void openButtonClicked()
+    void openButtonClicked(Instrument instrument)
     {
-        chooser = std::make_unique<juce::FileChooser> ("Select a Wave file to play...",
+        chooser = std::make_unique<juce::FileChooser> ("Select a file to play...",
             juce::File {},
-            "*.wav;*.mp3");
+            "*.wav;*.mp3;*.flac");
 
         auto chooserFlags = juce::FileBrowserComponent::openMode
                             | juce::FileBrowserComponent::canSelectFiles;
         
-        chooser->launchAsync (chooserFlags, [this] (const juce::FileChooser& fc)
+        chooser->launchAsync (chooserFlags, [this, instrument] (const juce::FileChooser& fc)
             {
                 auto file = fc.getResult();
                 if (file != juce::File {})
@@ -178,9 +232,9 @@ private:
                         {
                             changeState(Stopped);
                         }
-                        transportSource.setSource(newSource.get(), 0, nullptr, reader->sampleRate);
+                        transportSources[instrument]->setSource(newSource.get(), 0, nullptr, reader->sampleRate);
                         playButton.setEnabled(true);
-                        readerSource.reset(newSource.release());
+                        readerSources[instrument].reset(newSource.release());
                     }
                 }
             });
@@ -211,15 +265,16 @@ private:
     }
 
 
-    juce::TextButton openButton;
+    std::array<std::unique_ptr<juce::TextButton>, 5> openButtons;
     juce::TextButton playButton;
     juce::TextButton stopButton;
 
     std::unique_ptr<juce::FileChooser> chooser;
 
     juce::AudioFormatManager formatManager;
-    std::unique_ptr<juce::AudioFormatReaderSource> readerSource;
-    juce::AudioTransportSource transportSource;
+    std::array<std::unique_ptr<juce::AudioFormatReaderSource>, 5> readerSources;
+    std::array<std::unique_ptr<juce::AudioTransportSource>, 5> transportSources;
+    juce::MixerAudioSource mixer;
     TransportState state;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };
