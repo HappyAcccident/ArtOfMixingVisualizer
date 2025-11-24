@@ -4,12 +4,25 @@
 
 MainComponent::MainComponent() : state (Stopped)
 {
-    for(auto instrument : instruments)
+    formatManager.registerBasicFormats();
+    setAudioChannels(0, 10);
+    for(auto& source : transportSources)
     {
-        openButtons[instrument] = std::make_unique<juce::TextButton>();
-        addAndMakeVisible(openButtons[instrument].get());
-        openButtons[instrument]->setButtonText("Choose " + instrumentToString(instrument) + "...");
-        openButtons[instrument]->onClick = [this, instrument] {openButtonClicked(instrument);};
+        source = std::make_unique<juce::AudioTransportSource>();
+        source->addChangeListener(this);
+        mixer.addInputSource(source.get(), true);
+    }
+    for(int n = 0; n < 5; n++)
+    {
+        openButtons[n] = std::make_unique<juce::TextButton>();
+        addAndMakeVisible(openButtons[n].get());
+        openButtons[n]->setButtonText("Choose...");
+        openButtons[n]->onClick = [this, n] {openButtonClicked(n);};
+
+        toggleButtons[n] = std::make_unique<juce::ToggleButton>();
+        addAndMakeVisible(toggleButtons[n].get());
+        toggleButtons[n]->onStateChange = [this, n] {toggleButtonStateChanged(n);};
+        toggleButtons[n]->setToggleState(true, juce::dontSendNotification);
     }
     addAndMakeVisible(&playButton);
     playButton.setButtonText ("Play");
@@ -23,14 +36,6 @@ MainComponent::MainComponent() : state (Stopped)
     stopButton.onClick = [this] {stopButtonClicked();};
     setSize (300, 200);
     startTimerHz(60);
-    formatManager.registerBasicFormats();
-    for(auto& source : transportSources)
-    {
-        source = std::make_unique<juce::AudioTransportSource>();
-        source->addChangeListener(this);
-        mixer.addInputSource(source.get(), true);
-    }
-    setAudioChannels(0, 10);
 }
 
 //==============================================================================
@@ -46,14 +51,21 @@ void MainComponent::paint (juce::Graphics& g)
 
 void MainComponent::resized()
 {
-    for (auto instrument : instruments)
+    for (int n = 0; n < 5; n++)
     {
-        openButtons[instrument]->setBounds(getWidth()/50, (int(instrument)+1)*getHeight()/25, getWidth()/6, 20);
+        openButtons[n]->setBounds(getWidth()/50, (n+1)*getHeight()/25, getWidth()/6, 20);
+        toggleButtons[n]->setBounds(getWidth()/50-30, (n+1)*getHeight()/25, 20, 20);
     }
     playButton.setBounds(getWidth()/50, 6*getHeight()/25, getWidth()/6, 20);
     stopButton.setBounds(getWidth()/50, 7*getHeight()/25, getWidth()/6, 20);
 }
 
+void MainComponent::timerCallback()
+{
+    repaint();
+}
+
+//==============================================================================
 void MainComponent::getNextAudioBlock(const juce::AudioSourceChannelInfo& bufferToFill)
 {
     if (!std::any_of(readerSources.begin(), readerSources.end(),
@@ -138,7 +150,7 @@ void MainComponent::changeState(TransportState newState)
     }
 }
 
-void MainComponent::openButtonClicked(Instrument instrument)
+void MainComponent::openButtonClicked(int button)
 {
     chooser = std::make_unique<juce::FileChooser> ("Select a file to play...",
         juce::File {},
@@ -146,7 +158,7 @@ void MainComponent::openButtonClicked(Instrument instrument)
     auto chooserFlags = juce::FileBrowserComponent::openMode
                         | juce::FileBrowserComponent::canSelectFiles;
     
-    chooser->launchAsync (chooserFlags, [this, instrument] (const juce::FileChooser& fc)
+    chooser->launchAsync (chooserFlags, [this, button] (const juce::FileChooser& fc)
         {
             auto file = fc.getResult();
             if (file != juce::File {})
@@ -154,6 +166,8 @@ void MainComponent::openButtonClicked(Instrument instrument)
                 auto* reader = formatManager.createReaderFor(file);
                 if (reader != nullptr)
                 {
+                    openButtons[button]->setButtonText(file.getFileName());
+
                     auto newSource = std::make_unique<juce::AudioFormatReaderSource> (reader, true);
                     if (state == Playing)
                     {
@@ -163,9 +177,9 @@ void MainComponent::openButtonClicked(Instrument instrument)
                     {
                         changeState(Stopped);
                     }
-                    transportSources[instrument]->setSource(newSource.get(), 0, nullptr, reader->sampleRate);
+                    transportSources[button]->setSource(newSource.get(), 0, nullptr, reader->sampleRate);
                     playButton.setEnabled(true);
-                    readerSources[instrument].reset(newSource.release());
+                    readerSources[button].reset(newSource.release());
                 }
             }
         });
@@ -195,9 +209,17 @@ void MainComponent::stopButtonClicked()
     }
 }
 
-void MainComponent::timerCallback()
+void MainComponent::toggleButtonStateChanged(int button)
 {
-    repaint();
+    auto state = toggleButtons[button]->getToggleState();
+    if (state)
+    {
+        transportSources[button]->setGain(1.0);
+    }
+    else
+    {
+        transportSources[button]->setGain(0.0);
+    }
 }
 
 //==============================================================================

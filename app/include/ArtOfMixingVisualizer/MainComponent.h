@@ -40,44 +40,18 @@ private:
         Stopping
     };
 
-    enum Instrument
-    {
-        Violin_I,
-        Violin_II,
-        Viola,
-        Chello_I,
-        Chello_II
-    };
-
-    std::vector<Instrument> instruments = {Violin_I,
-                                           Violin_II,
-                                           Viola,
-                                           Chello_I,
-                                           Chello_II};
-    
-    static juce::String instrumentToString(Instrument instrument)
-    {
-        switch (instrument)
-        {
-            case Instrument::Violin_I:   return "Violin I";
-            case Instrument::Violin_II:   return "Violin II";
-            case Instrument::Viola:   return "Violia";
-            case Instrument::Chello_I:   return "Chello I";
-            case Instrument::Chello_II:   return "Chello II";
-        }
-        jassertfalse; // catches invalid values in debug builds
-        return "Unknown";
-    }
-
     void changeState(TransportState newState);
-    void openButtonClicked(Instrument instrument);
+    void openButtonClicked(int button);
     void playButtonClicked();
     void stopButtonClicked();
+    void toggleButtonStateChanged(int button);
 
 
     std::array<std::unique_ptr<juce::TextButton>, 5> openButtons;
     juce::TextButton playButton;
     juce::TextButton stopButton;
+
+    std::array<std::unique_ptr<juce::ToggleButton>, 5> toggleButtons;
 
     std::unique_ptr<juce::FileChooser> chooser;
 
