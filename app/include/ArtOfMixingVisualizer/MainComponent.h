@@ -3,6 +3,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_audio_devices/juce_audio_devices.h>
+#include "ArtOfMixingVisualizer/OpenGLComponent.h"
 
 //==============================================================================
 /*
@@ -60,5 +61,8 @@ private:
     std::array<std::unique_ptr<juce::AudioTransportSource>, 5> transportSources;
     juce::MixerAudioSource mixer;
     TransportState state;
+
+    OpenGLComponent openGLComponent;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

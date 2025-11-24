@@ -13,7 +13,8 @@ juce_add_gui_app(${PROJECT_NAME}
 target_sources(${PROJECT_NAME}
     PRIVATE
         source/Main.cpp
-        source/MainComponent.cpp)
+        source/MainComponent.cpp
+        source/OpenGLComponent.cpp)
 
 target_include_directories(${PROJECT_NAME}
     PRIVATE
@@ -33,6 +34,7 @@ target_link_libraries(${PROJECT_NAME}
         juce::juce_audio_utils
         juce::juce_audio_formats
         juce::juce_audio_devices
+        juce::juce_opengl
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags

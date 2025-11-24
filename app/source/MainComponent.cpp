@@ -4,8 +4,6 @@
 
 MainComponent::MainComponent() : state (Stopped)
 {
-    formatManager.registerBasicFormats();
-    setAudioChannels(0, 10);
     for(int n = 0; n < 5; n++)
     {
         transportSources[n] = std::make_unique<juce::AudioTransportSource>();
@@ -22,6 +20,7 @@ MainComponent::MainComponent() : state (Stopped)
         toggleButtons[n]->onStateChange = [this, n] {toggleButtonStateChanged(n);};
         toggleButtons[n]->setToggleState(true, juce::dontSendNotification);
     }
+
     addAndMakeVisible(&playButton);
     playButton.setButtonText ("Play");
     playButton.onClick = [this] {playButtonClicked();};
@@ -32,7 +31,14 @@ MainComponent::MainComponent() : state (Stopped)
     stopButton.setColour(juce::TextButton::buttonColourId, juce::Colours::red);
     stopButton.setEnabled(false);
     stopButton.onClick = [this] {stopButtonClicked();};
-    setSize (300, 200);
+
+    addAndMakeVisible(openGLComponent);
+
+    setSize (975, 725);
+
+    formatManager.registerBasicFormats();
+    setAudioChannels(0, 10);
+
     startTimerHz(60);
 }
 
@@ -44,7 +50,7 @@ void MainComponent::paint (juce::Graphics& g)
 
     g.setFont (juce::FontOptions (16.0f));
     g.setColour (juce::Colours::white);
-    g.drawText (/*this->getTransportSourceState() +*/ this->getState(), getLocalBounds(), juce::Justification::centred, true);
+    // g.drawText (/*this->getTransportSourceState() +*/ this->getState(), getLocalBounds(), juce::Justification::centred, true);
 }
 
 void MainComponent::resized()
@@ -56,6 +62,8 @@ void MainComponent::resized()
     }
     playButton.setBounds(getWidth()/50, 6*getHeight()/25, getWidth()/6, 20);
     stopButton.setBounds(getWidth()/50, 7*getHeight()/25, getWidth()/6, 20);
+
+    openGLComponent.setBounds(365, 10, 600, 600);
 }
 
 void MainComponent::timerCallback()
