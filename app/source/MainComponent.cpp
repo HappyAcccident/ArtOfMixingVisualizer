@@ -6,14 +6,12 @@ MainComponent::MainComponent() : state (Stopped)
 {
     formatManager.registerBasicFormats();
     setAudioChannels(0, 10);
-    for(auto& source : transportSources)
-    {
-        source = std::make_unique<juce::AudioTransportSource>();
-        source->addChangeListener(this);
-        mixer.addInputSource(source.get(), true);
-    }
     for(int n = 0; n < 5; n++)
     {
+        transportSources[n] = std::make_unique<juce::AudioTransportSource>();
+        transportSources[n]->addChangeListener(this);
+        mixer.addInputSource(transportSources[n].get(), true);
+
         openButtons[n] = std::make_unique<juce::TextButton>();
         addAndMakeVisible(openButtons[n].get());
         openButtons[n]->setButtonText("Choose...");
