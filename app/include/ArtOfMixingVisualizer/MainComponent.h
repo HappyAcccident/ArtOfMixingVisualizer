@@ -11,8 +11,7 @@
     your controls and content.
 */
 class MainComponent final : public juce::AudioAppComponent,
-                            public juce::ChangeListener,
-                            public juce::Timer
+                            public juce::ChangeListener
 {
 public:
     //==============================================================================
@@ -21,7 +20,6 @@ public:
     //==============================================================================
     void paint (juce::Graphics&) override;
     void resized() override;
-    void timerCallback() override;
 
     void getNextAudioBlock(const juce::AudioSourceChannelInfo& bufferToFill) override;
     void prepareToPlay(int samplesPerBlockExpected, double sampleRate) override;

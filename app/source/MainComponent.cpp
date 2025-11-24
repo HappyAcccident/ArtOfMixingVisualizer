@@ -38,8 +38,6 @@ MainComponent::MainComponent() : state (Stopped)
 
     formatManager.registerBasicFormats();
     setAudioChannels(0, 10);
-
-    startTimerHz(60);
 }
 
 //==============================================================================
@@ -63,12 +61,7 @@ void MainComponent::resized()
     playButton.setBounds(getWidth()/50, 6*getHeight()/25, getWidth()/6, 20);
     stopButton.setBounds(getWidth()/50, 7*getHeight()/25, getWidth()/6, 20);
 
-    openGLComponent.setBounds(365, 10, 600, 600);
-}
-
-void MainComponent::timerCallback()
-{
-    repaint();
+    openGLComponent.setBounds(365, 10, 800, 600);
 }
 
 //==============================================================================
