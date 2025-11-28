@@ -105,7 +105,7 @@ private:
 
         void bind();
 
-    protected:
+    public:
         struct VertexBuffer
         {
             explicit VertexBuffer (WavefrontObjFile::Shape& aShape);
@@ -153,9 +153,9 @@ private:
         float radius;
     };
 
-    juce::File teapotFile;
-    juce::File cubeFile;
-    juce::File sphereFile;
+    juce::File teapotFile = juce::File("C:/Users/nate/ArtOfMixing/app/resources/teapot.obj");
+    juce::File cubeFile = juce::File("C:/Users/nate/ArtOfMixing/app/resources/cube.obj");
+    juce::File sphereFile = juce::File("C:/Users/nate/ArtOfMixing/app/resources/sphere.obj");
 
     juce::File teapotTex;
     juce::File cubeTex;

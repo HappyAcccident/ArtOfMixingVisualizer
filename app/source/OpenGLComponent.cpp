@@ -15,9 +15,6 @@ OpenGLComponent::OpenGLComponent()
 {
     juce::OpenGLPixelFormat pixelFormat;
     pixelFormat.depthBufferBits = 24; // 24-bit depth buffer
-    teapotFile = juce::File("C:/Users/nate/ArtOfMixing/app/resources/teapot.obj");
-    cubeFile = juce::File("C:/Users/nate/ArtOfMixing/app/resources/cube.obj");
-    sphereFile = juce::File("C:/Users/nate/ArtOfMixing/app/resources/sphere.obj");
     setOpaque(true);
     openGLContext.setRenderer(this);
     openGLContext.setContinuousRepainting(true);
@@ -134,14 +131,10 @@ void OpenGLComponent::renderOpenGL()
 
     glUniform1i(useTextureLoc, 1);
     glBindTexture(GL_TEXTURE_2D, teapotTextureID);
-    // teapot->draw(*attributes);
+    teapot->draw(*attributes);
 
-    glUniform1i(useTextureLoc, 0);
-    // cube->draw(*attributes);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    cube->draw(*attributes);
 
-    glUniform1i(useTextureLoc, 1);
-    glBindTexture(GL_TEXTURE_2D, teapotTextureID);
     sphere->draw(*attributes);
     glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -229,11 +222,11 @@ void OpenGLComponent::createShaders()
         sphere    .reset();
         attributes.reset();
         uniforms  .reset();
-        shader.reset (newShader.release());                                                                 // [3]
-        shader->use();
+        shader    .reset (newShader.release());                                                                 // [3]
+        shader    ->use();
         teapot    .reset (new Shape(teapotFile));
         cube      .reset (new Shape(cubeFile));
-        sphere    .reset (new Sphere(10.f));
+        sphere    .reset (new Sphere(10.0f));
         attributes.reset (new Attributes (*shader));
         uniforms  .reset (new Uniforms (*shader));
         statusText = "GLSL: v" + juce::String (juce::OpenGLShaderProgram::getLanguageVersion(), 2);
@@ -243,9 +236,9 @@ void OpenGLComponent::createShaders()
         statusText = newShader->getLastError();                                                             // [4]
     }
 
+    sphere->bind();
     teapot->bind();
     cube->bind();
-    sphere->bind();
 }
 
 //==============================================================================
@@ -328,6 +321,7 @@ void OpenGLComponent::Shape::bind()
     using namespace ::juce::gl;
     for (auto& vertexBuffer : vertexBuffers)
     {
+        glBindBuffer (GL_ARRAY_BUFFER, vertexBuffer->vertexBuffer);
         glBufferData (GL_ARRAY_BUFFER,                                              // [4]
                   static_cast<GLsizeiptr> (static_cast<size_t> (vertexBuffer->vertices.size()) * sizeof (Vertex)),
                   vertexBuffer->vertices.getRawDataPointer(), GL_STATIC_DRAW);
@@ -346,9 +340,10 @@ OpenGLComponent::Shape::VertexBuffer::VertexBuffer(WavefrontObjFile::Shape& aSha
     using namespace ::juce::gl;
     numIndices = aShape.mesh.indices.size();                                    // [1]
     indicesPtr = aShape.mesh.indices.getRawDataPointer();
-    glGenBuffers (1, &vertexBuffer);                                            // [2]
-    glBindBuffer (GL_ARRAY_BUFFER, vertexBuffer);
     createVertexListFromMesh (aShape.mesh, vertices, juce::Colours::green);     // [3]
+
+    glGenBuffers(1, &vertexBuffer);
+    glGenBuffers(1, &indexBuffer);
 }
 
 OpenGLComponent::Shape::VertexBuffer::~VertexBuffer()
