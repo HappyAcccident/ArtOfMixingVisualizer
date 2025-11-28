@@ -101,7 +101,9 @@ private:
     {
         Shape(juce::File objFile);
 
-        void draw (Attributes& glAttributes);
+        void draw(Attributes& glAttributes);
+
+        void bind();
 
     protected:
         struct VertexBuffer
@@ -113,6 +115,8 @@ private:
             void bind();
 
             GLuint vertexBuffer, indexBuffer;
+            juce::Array<Vertex> vertices;
+            WavefrontObjFile::Index* indicesPtr;
             int numIndices;
 
             JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VertexBuffer)

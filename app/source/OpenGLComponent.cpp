@@ -140,7 +140,8 @@ void OpenGLComponent::renderOpenGL()
     // cube->draw(*attributes);
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    glUniform1i(useTextureLoc, 0);
+    glUniform1i(useTextureLoc, 1);
+    glBindTexture(GL_TEXTURE_2D, teapotTextureID);
     sphere->draw(*attributes);
     glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -168,8 +169,8 @@ juce::Matrix3D<float> OpenGLComponent::getViewMatrix() const
 {
     auto viewMatrix = juce::Matrix3D<float>::fromTranslation ({ 0.0f, 0.0f, -10.0f });  // [4]
     auto rotationMatrix = viewMatrix.rotation ({ 0.0f,
-                                                 0.0f /* * std::sin ((float) getFrameCounter() * 0.01f) */,
-                                                 0.0f });                        // [5]
+                                                 1.0f * (float)getFrameCounter() * 0.01f,
+                                                 0.5f * (float)getFrameCounter() * 0.01f });                        // [5]
     return viewMatrix * rotationMatrix;                                           // [6]
 }
 
@@ -241,6 +242,10 @@ void OpenGLComponent::createShaders()
     {
         statusText = newShader->getLastError();                                                             // [4]
     }
+
+    teapot->bind();
+    cube->bind();
+    sphere->bind();
 }
 
 //==============================================================================
@@ -301,7 +306,9 @@ OpenGLComponent::Shape::Shape(juce::File objFile)
 {
     if (shapeFile.load(objFile).wasOk())
         for (auto* s : shapeFile.shapes)
+        {
             vertexBuffers.add (new VertexBuffer (*s));
+        }
 }
 
 void OpenGLComponent::Shape::draw (Attributes& glAttributes)
@@ -316,24 +323,32 @@ void OpenGLComponent::Shape::draw (Attributes& glAttributes)
     }
 }
 
+void OpenGLComponent::Shape::bind()
+{
+    using namespace ::juce::gl;
+    for (auto& vertexBuffer : vertexBuffers)
+    {
+        glBufferData (GL_ARRAY_BUFFER,                                              // [4]
+                  static_cast<GLsizeiptr> (static_cast<size_t> (vertexBuffer->vertices.size()) * sizeof (Vertex)),
+                  vertexBuffer->vertices.getRawDataPointer(), GL_STATIC_DRAW);
+        glGenBuffers (1, &vertexBuffer->indexBuffer);                                             // [5]
+        glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, vertexBuffer->indexBuffer);
+        glBufferData (GL_ELEMENT_ARRAY_BUFFER,
+                    static_cast<GLsizeiptr> (static_cast<size_t> (vertexBuffer->numIndices) * sizeof (juce::uint32)),
+                    vertexBuffer->indicesPtr, GL_STATIC_DRAW);
+    }
+}
+
 //==============================================================================
 
 OpenGLComponent::Shape::VertexBuffer::VertexBuffer(WavefrontObjFile::Shape& aShape)
 {
     using namespace ::juce::gl;
     numIndices = aShape.mesh.indices.size();                                    // [1]
+    indicesPtr = aShape.mesh.indices.getRawDataPointer();
     glGenBuffers (1, &vertexBuffer);                                            // [2]
     glBindBuffer (GL_ARRAY_BUFFER, vertexBuffer);
-    juce::Array<Vertex> vertices;
     createVertexListFromMesh (aShape.mesh, vertices, juce::Colours::green);     // [3]
-    glBufferData (GL_ARRAY_BUFFER,                                              // [4]
-                  static_cast<GLsizeiptr> (static_cast<size_t> (vertices.size()) * sizeof (Vertex)),
-                  vertices.getRawDataPointer(), GL_STATIC_DRAW);
-    glGenBuffers (1, &indexBuffer);                                             // [5]
-    glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
-    glBufferData (GL_ELEMENT_ARRAY_BUFFER,
-                  static_cast<GLsizeiptr> (static_cast<size_t> (numIndices) * sizeof (juce::uint32)),
-                  aShape.mesh.indices.getRawDataPointer(), GL_STATIC_DRAW);
 }
 
 OpenGLComponent::Shape::VertexBuffer::~VertexBuffer()
@@ -354,5 +369,13 @@ void OpenGLComponent::Shape::VertexBuffer::bind()
 
 OpenGLComponent::Sphere::Sphere(float radius) : Shape(juce::File("C:/Users/nate/ArtOfMixing/app/resources/sphere.obj"))
 {
-    
+    for (auto& buffer : vertexBuffers)
+    {
+        for (auto& vertex : buffer->vertices)
+        {
+            vertex.position[0] *= radius;
+            vertex.position[1] *= radius;
+            vertex.position[2] *= radius;
+        }
+    }
 }
