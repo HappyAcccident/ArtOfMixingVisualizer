@@ -100,13 +100,16 @@ private:
     struct Shape
     {
         Shape(juce::File objFile);
+        Shape(juce::File objFile, std::function<void(juce::Array<Vertex>&)> vertexFunction);
 
         void draw (Attributes& glAttributes);
+        std::function<void(juce::Array<Vertex>&)> vertexFunction;
 
     protected:
         struct VertexBuffer
         {
-            explicit VertexBuffer (WavefrontObjFile::Shape& aShape);
+            explicit VertexBuffer (WavefrontObjFile::Shape& aShape, 
+                                   const std::function<void(juce::Array<Vertex>&)>& vertexFunction);
 
             ~VertexBuffer();
 
@@ -149,12 +152,13 @@ private:
         float radius;
     };
 
-    juce::File teapotFile;
     juce::File cubeFile;
     juce::File sphereFile;
+    juce::File circleFile;
 
-    juce::File teapotTex;
     juce::File cubeTex;
+
+    juce::OpenGLTexture cubeTexture;
     
     juce::String debug;
 
@@ -162,13 +166,12 @@ private:
     juce::String fragmentShader;
 
     std::unique_ptr<juce::OpenGLShaderProgram> shader;
-    std::unique_ptr<Shape> teapot;
     std::unique_ptr<Shape> cube;
     std::unique_ptr<Shape> sphere;
+    std::unique_ptr<Shape> circle;
+    
     std::unique_ptr<Attributes> attributes;
     std::unique_ptr<Uniforms> uniforms;
-    GLuint teapotTextureID = 0;
-    GLuint cubeTextureID = 1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OpenGLComponent)
 };
