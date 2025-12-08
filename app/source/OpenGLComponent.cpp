@@ -23,7 +23,6 @@ OpenGLComponent::OpenGLComponent()
     openGLContext.setContinuousRepainting(true);
     openGLContext.setPixelFormat(pixelFormat);
     openGLContext.attachTo(*this);
-    startTimerHz(60);
 }
 
 OpenGLComponent::~OpenGLComponent()
@@ -46,12 +45,38 @@ void OpenGLComponent::resized()
 void OpenGLComponent::timerCallback()
 {
     frameCounter++;
+
+    auto transformX = [this](float& refX, float& posX) 
+    {
+        posX = refX;
+        posX += cos((float) frameCounter * 0.01f);
+    };
+    auto transformY = [this](float& refY, float& posY) 
+    {
+        posY = refY;
+        posY += abs(sin((float) frameCounter * 0.1f)) - 0.725;
+    };
+    auto transformZ = [this](float& refZ, float& posZ) 
+    {
+        posZ = refZ;
+        posZ += 2 * sin((float) frameCounter * 0.01f);
+    };
+
+    juce::Array<std::function<void(float&, float&)>> transformations = {transformX, transformY, transformZ};
+
+    auto transformation = [this](float& ref, float& pos)
+    {
+        pos = ref * 0.5 * (1.f - sin((float) frameCounter * 0.01f));
+    };
+
+    instrumentOne->updateSphereAndShadow(transformations);
 }
 
 void OpenGLComponent::newOpenGLContextCreated()
 {
     using namespace ::juce::gl;
     createShaders();
+    startTimerHz(60);
 
     cubeTex = juce::File("C:/Users/nate/ArtOfMixing/app/resources/cubeTex.png");
     juce::Image cubeImage = juce::ImageFileFormat::loadFrom(cubeTex);
@@ -97,14 +122,12 @@ void OpenGLComponent::renderOpenGL()
         uniforms->viewMatrix->setMatrix4 (getViewMatrix().mat, 1, false);
 
     cubeTexture.bind();
-
     cube->draw(*attributes);
-
     cubeTexture.unbind();
+    
     glUniform1i(useTextureLoc, 0);
-    sphere->draw(*attributes);
-
-    circle->draw(*attributes);
+    
+    instrumentOne->draw(*attributes);
 
     // Reset the element buffers so child Components draw correctly
     glBindBuffer (GL_ARRAY_BUFFER, 0);                                      // [9]
@@ -175,7 +198,7 @@ void OpenGLComponent::createShaders()
                 }
                 else
                 {
-                    gl_FragColor = vec4(0.0, 0.0, 0.0, 0.5);
+                    gl_FragColor = colour;
                 }
            })";
     std::unique_ptr<juce::OpenGLShaderProgram> newShader (new juce::OpenGLShaderProgram (openGLContext));   // [1]
@@ -187,13 +210,15 @@ void OpenGLComponent::createShaders()
         cube      .reset();
         sphere    .reset();
         circle    .reset();
+        instrumentOne.reset();
         attributes.reset();
         uniforms  .reset();
         shader.reset (newShader.release());                                                                 // [3]
         shader->use();
-        cube      .reset (new Shape(cubeFile));
-        sphere    .reset (new Sphere(5.f));       
-        circle    .reset (new Shape(circleFile));
+        cube      .reset (new Shape(cubeFile, juce::Colours::transparentWhite));
+        sphere    .reset (new Shape(sphereFile, juce::Colours::orange.withAlpha(0.65f)));       
+        circle    .reset (new Shape(circleFile, juce::Colours::transparentBlack.withAlpha(0.25f)));
+        instrumentOne.reset(new SphereAndShadow(sphere.get(), circle.get()));
         attributes.reset (new Attributes (*shader));
         uniforms  .reset (new Uniforms (*shader));
         statusText = "GLSL: v" + juce::String (juce::OpenGLShaderProgram::getLanguageVersion(), 2);
@@ -202,6 +227,8 @@ void OpenGLComponent::createShaders()
     {
         statusText = newShader->getLastError();                                                             // [4]
     }
+
+
 }
 
 //==============================================================================
@@ -258,19 +285,14 @@ OpenGLComponent::Uniforms::Uniforms(juce::OpenGLShaderProgram& shaderProgram)
 
 //==============================================================================
 
-OpenGLComponent::Shape::Shape(juce::File objFile)
-{
-    vertexFunction = [](juce::Array<Vertex>& verts) {};
-    if (shapeFile.load(objFile).wasOk())
-        for (auto* s : shapeFile.shapes)
-            vertexBuffers.add (new VertexBuffer (*s, vertexFunction));
-}
-
-OpenGLComponent::Shape::Shape(juce::File objFile, std::function<void(juce::Array<Vertex>&)> vertexFunction)
+OpenGLComponent::Shape::Shape(juce::File objFile, juce::Colour color)
 {
     if (shapeFile.load(objFile).wasOk())
         for (auto* s : shapeFile.shapes)
-            vertexBuffers.add (new VertexBuffer (*s, vertexFunction));
+        {
+            vertexBuffers.add (new VertexBuffer (*s, color));
+            referenceVertexBuffers.add (new VertexBuffer(*s, color));
+        }
 }
 
 void OpenGLComponent::Shape::draw (Attributes& glAttributes)
@@ -280,31 +302,32 @@ void OpenGLComponent::Shape::draw (Attributes& glAttributes)
     {
         vertexBuffer->bind();
         glAttributes.enable();
-        glDrawElements (GL_TRIANGLES, vertexBuffer->numIndices, GL_UNSIGNED_INT, nullptr);
+        glDrawElements (GL_TRIANGLES, vertexBuffer->indices.size(), GL_UNSIGNED_INT, nullptr);
         glAttributes.disable();
+        vertexBuffer->unbind();
+    }
+}
+
+void OpenGLComponent::Shape::updateShape(const std::function<void(OpenGLComponent::Vertex&, OpenGLComponent::Vertex&)>& vertexFunction)
+{
+    for (int vB = 0; vB < referenceVertexBuffers.size(); vB++)
+    {
+        for (int v = 0; v < referenceVertexBuffers.getUnchecked(vB)->vertices.size(); v++)
+        {
+            vertexFunction(referenceVertexBuffers.getUnchecked(vB)->vertices.getReference(v), 
+                           vertexBuffers.getUnchecked(vB)->vertices.getReference(v));
+        }
     }
 }
 
 //==============================================================================
 
-OpenGLComponent::Shape::VertexBuffer::VertexBuffer(WavefrontObjFile::Shape& aShape, 
-                                                   const std::function<void(juce::Array<Vertex>&)>& vertexFunction)
+OpenGLComponent::Shape::VertexBuffer::VertexBuffer(WavefrontObjFile::Shape& aShape, juce::Colour color)
 {
     using namespace ::juce::gl;
-    numIndices = aShape.mesh.indices.size();                                    // [1]
-    glGenBuffers (1, &vertexBuffer);                                            // [2]
-    glBindBuffer (GL_ARRAY_BUFFER, vertexBuffer);
-    juce::Array<Vertex> vertices;
-    createVertexListFromMesh (aShape.mesh, vertices, juce::Colours::green);     // [3]
-    vertexFunction(vertices);
-    glBufferData (GL_ARRAY_BUFFER,                                              // [4]
-                  static_cast<GLsizeiptr> (static_cast<size_t> (vertices.size()) * sizeof (Vertex)),
-                  vertices.getRawDataPointer(), GL_STATIC_DRAW);
-    glGenBuffers (1, &indexBuffer);                                             // [5]
-    glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
-    glBufferData (GL_ELEMENT_ARRAY_BUFFER,
-                  static_cast<GLsizeiptr> (static_cast<size_t> (numIndices) * sizeof (juce::uint32)),
-                  aShape.mesh.indices.getRawDataPointer(), GL_STATIC_DRAW);
+    glGenBuffers (1, &vertexBuffer);
+    glGenBuffers (1, &indexBuffer);                                            // [2]
+    createVertexListFromMesh (aShape.mesh, vertices, indices, color);     // [3]
 }
 
 OpenGLComponent::Shape::VertexBuffer::~VertexBuffer()
@@ -319,22 +342,50 @@ void OpenGLComponent::Shape::VertexBuffer::bind()
     using namespace ::juce::gl;
     glBindBuffer (GL_ARRAY_BUFFER, vertexBuffer);
     glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
+    glBufferData (GL_ARRAY_BUFFER,                                              // [4]
+                  static_cast<GLsizeiptr> (static_cast<size_t> (vertices.size()) * sizeof (Vertex)),
+                  vertices.getRawDataPointer(), GL_STATIC_DRAW);
+    glBufferData (GL_ELEMENT_ARRAY_BUFFER,
+                  static_cast<GLsizeiptr> (static_cast<size_t> (indices.size()) * sizeof (juce::uint32)),
+                  indices.getRawDataPointer(), GL_STATIC_DRAW);
+}
+
+void OpenGLComponent::Shape::VertexBuffer::unbind()
+{
+    using namespace ::juce::gl;
+    glBindBuffer (GL_ARRAY_BUFFER, 0);
+    glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, 0);
 }
 
 //==============================================================================
 
-OpenGLComponent::Sphere::Sphere(float r)
-    : Shape(
-        juce::File("C:/Users/nate/ArtOfMixing/app/resources/sphere.obj"),
+OpenGLComponent::SphereAndShadow::SphereAndShadow(Shape* sphere, 
+                                                  Shape* shadow)
+                                                  : sphere(sphere), 
+                                                    shadow(shadow)
+{   
+}
 
-        [r](juce::Array<Vertex>& verts)
-        {
-            for (auto& vertex : verts)
-                for (auto& coord : vertex.position)
-                    coord *= r;
-        }
-      ),
-      radius(r)
+void OpenGLComponent::SphereAndShadow::updateSphereAndShadow(const juce::Array<std::function<void(float&, float&)>>& transformations)
 {
+    auto sphereFunction = [this, &transformations](OpenGLComponent::Vertex& referenceVertex, OpenGLComponent::Vertex& vertex)
+    {
+        for (int n = 0; n < 3; n++)
+            transformations[n](referenceVertex.position[n], vertex.position[n]);
+    };
 
+    auto shadowFunction = [this, &transformations](OpenGLComponent::Vertex& referenceVertex, OpenGLComponent::Vertex& vertex)
+    {
+        transformations[0](referenceVertex.position[0], vertex.position[0]);
+        transformations[2](referenceVertex.position[2], vertex.position[2]);
+    };
+
+    sphere->updateShape(sphereFunction);
+    shadow->updateShape(shadowFunction);
+}
+
+void OpenGLComponent::SphereAndShadow::draw(OpenGLComponent::Attributes &glAttributes)
+{
+    sphere->draw(glAttributes);
+    shadow->draw(glAttributes);
 }

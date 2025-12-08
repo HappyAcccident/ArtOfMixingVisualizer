@@ -55,6 +55,8 @@ private:
         float texCoord[2];
     };
 
+    typedef juce::uint32 Index;
+
     struct Attributes
     {
         explicit Attributes (juce::OpenGLShaderProgram& shaderProgram);
@@ -97,36 +99,39 @@ private:
         }
     };
 
+    struct TextureCoord  { float x, y;    };
+
     struct Shape
     {
-        Shape(juce::File objFile);
-        Shape(juce::File objFile, std::function<void(juce::Array<Vertex>&)> vertexFunction);
+        Shape(juce::File objFile, juce::Colour color);
 
         void draw (Attributes& glAttributes);
-        std::function<void(juce::Array<Vertex>&)> vertexFunction;
+        void updateShape (const std::function<void(OpenGLComponent::Vertex&, OpenGLComponent::Vertex&)>& vertexFunction);
 
     protected:
         struct VertexBuffer
         {
-            explicit VertexBuffer (WavefrontObjFile::Shape& aShape, 
-                                   const std::function<void(juce::Array<Vertex>&)>& vertexFunction);
+            explicit VertexBuffer (WavefrontObjFile::Shape& aShape, juce::Colour color);
 
             ~VertexBuffer();
 
             void bind();
+            void unbind();
 
             GLuint vertexBuffer, indexBuffer;
-            int numIndices;
+            juce::Array<Vertex> vertices;
+            juce::Array<Index> indices;
 
             JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VertexBuffer)
         };
 
         WavefrontObjFile shapeFile;
+        juce::OwnedArray<VertexBuffer> referenceVertexBuffers;
         juce::OwnedArray<VertexBuffer> vertexBuffers;
 
-        static void createVertexListFromMesh (const WavefrontObjFile::Mesh& mesh, juce::Array<Vertex>& list, juce::Colour colour)
+        static void createVertexListFromMesh (const WavefrontObjFile::Mesh& mesh, juce::Array<Vertex>& vertexList, juce::Array<Index>& indexList, juce::Colour colour)
         {
-            auto scale = 0.2f;                                                  // [6]
+            auto scale = 1.f;                                                  // [6]
             WavefrontObjFile::TextureCoord defaultTexCoord { 0.5f, 0.5f };
             WavefrontObjFile::Vertex defaultNormal { 0.5f, 0.5f, 0.5f };
 
@@ -136,20 +141,30 @@ private:
                 const auto& n = i < mesh.normals.size() ? mesh.normals.getReference (i) : defaultNormal;
                 const auto& tc = i < mesh.textureCoords.size() ? mesh.textureCoords.getReference (i) : defaultTexCoord;
 
-                list.add ({ { scale * v.x, scale * v.y, scale * v.z, },
-                            { scale * n.x, scale * n.y, scale * n.z, },
-                            { colour.getFloatRed(), colour.getFloatGreen(), colour.getFloatBlue(), colour.getFloatAlpha() },
-                            { tc.x, tc.y } });                                  // [8]
+                vertexList.add ({ { scale * v.x, scale * v.y, scale * v.z, },
+                                { scale * n.x, scale * n.y, scale * n.z, },
+                                { colour.getFloatRed(), colour.getFloatGreen(), colour.getFloatBlue(), colour.getFloatAlpha() },
+                                { tc.x, tc.y } });                                  // [8]
+            }
+
+            for (auto i = 0; i < mesh.indices.size(); ++i)
+            {
+                const auto& index = mesh.indices.getReference(i);
+
+                indexList.add ((juce::uint32) index);
             }
         }
     };
 
-    struct Sphere : public Shape
+    struct SphereAndShadow
     {
-        Sphere(float radius);
-        
+        SphereAndShadow(Shape* sphere, Shape* shadow);
+
+        void updateSphereAndShadow(const juce::Array<std::function<void(float&, float&)>>& transformations);
+        void draw(OpenGLComponent::Attributes &glAttributes);
     private:
-        float radius;
+        Shape* sphere;
+        Shape* shadow;
     };
 
     juce::File cubeFile;
@@ -169,9 +184,11 @@ private:
     std::unique_ptr<Shape> cube;
     std::unique_ptr<Shape> sphere;
     std::unique_ptr<Shape> circle;
+
+    std::unique_ptr<SphereAndShadow> instrumentOne;
     
     std::unique_ptr<Attributes> attributes;
     std::unique_ptr<Uniforms> uniforms;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OpenGLComponent)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OpenGLComponent);
 };
