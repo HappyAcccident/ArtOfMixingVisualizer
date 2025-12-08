@@ -192,7 +192,7 @@ void OpenGLComponent::createShaders()
         shader.reset (newShader.release());                                                                 // [3]
         shader->use();
         cube      .reset (new Shape(cubeFile));
-        sphere    .reset (new Sphere(5.f));
+        sphere    .reset (new Sphere(5.f));       
         circle    .reset (new Shape(circleFile));
         attributes.reset (new Attributes (*shader));
         uniforms  .reset (new Uniforms (*shader));
