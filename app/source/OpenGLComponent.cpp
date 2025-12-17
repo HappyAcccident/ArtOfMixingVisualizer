@@ -15,7 +15,7 @@ OpenGLComponent::OpenGLComponent()
 {
     juce::OpenGLPixelFormat pixelFormat;
     pixelFormat.depthBufferBits = 24; // 24-bit depth buffer
-    cubeFile = juce::File("C:/Users/nate/ArtOfMixing/app/resources/cube.obj");
+    boxFile = juce::File("C:/Users/nate/ArtOfMixing/app/resources/box.obj");
     sphereFile = juce::File("C:/Users/nate/ArtOfMixing/app/resources/sphere.obj");
     circleFile = juce::File("C:/Users/nate/ArtOfMixing/app/resources/circle.obj");
     setOpaque(true);
@@ -46,30 +46,18 @@ void OpenGLComponent::timerCallback()
 {
     frameCounter++;
 
-    auto transformX = [this](float& refX, float& posX) 
-    {
-        posX = refX;
-        posX += cos((float) frameCounter * 0.01f);
-    };
-    auto transformY = [this](float& refY, float& posY) 
-    {
-        posY = refY;
-        posY += abs(sin((float) frameCounter * 0.1f)) - 0.725;
-    };
-    auto transformZ = [this](float& refZ, float& posZ) 
-    {
-        posZ = refZ;
-        posZ += 2 * sin((float) frameCounter * 0.01f);
-    };
+    auto transformOneX = [this](float& refX, float& posX) {posX = refX + cos((float) frameCounter * 0.01f);};
+    auto transformOneY = [this](float& refY, float& posY) {posY = refY + abs(sin((float) frameCounter * 0.1f)) - 0.725;};
+    auto transformOneZ = [this](float& refZ, float& posZ) {posZ = refZ + 2 * sin((float) frameCounter * 0.01f);};
+    juce::Array<std::function<void(float&, float&)>> transformationsOne = {transformOneX, transformOneY, transformOneZ};
 
-    juce::Array<std::function<void(float&, float&)>> transformations = {transformX, transformY, transformZ};
+    auto transformTwoX = [this](float& refX, float& posX) {posX = refX - cos((float) frameCounter * 0.01f);};
+    auto transformTwoY = [this](float& refY, float& posY) {posY = refY + abs(sin((float) frameCounter * 0.1f)) - 0.725;};
+    auto transformTwoZ = [this](float& refZ, float& posZ) {posZ = refZ - 2 * sin((float) frameCounter * 0.01f);};
+    juce::Array<std::function<void(float&, float&)>> transformationsTwo = {transformTwoX, transformTwoY, transformTwoZ};
 
-    auto transformation = [this](float& ref, float& pos)
-    {
-        pos = ref * 0.5 * (1.f - sin((float) frameCounter * 0.01f));
-    };
-
-    instrumentOne->updateSphereAndShadow(transformations);
+    instrumentOne->updateSphereAndShadow(transformationsOne);
+    instrumentTwo->updateSphereAndShadow(transformationsTwo);
 }
 
 void OpenGLComponent::newOpenGLContextCreated()
@@ -78,9 +66,9 @@ void OpenGLComponent::newOpenGLContextCreated()
     createShaders();
     startTimerHz(60);
 
-    cubeTex = juce::File("C:/Users/nate/ArtOfMixing/app/resources/cubeTex.png");
-    juce::Image cubeImage = juce::ImageFileFormat::loadFrom(cubeTex);
-    cubeTexture.loadImage(cubeImage);
+    boxTex = juce::File("C:/Users/nate/ArtOfMixing/app/resources/boxTex.png");
+    juce::Image boxImage = juce::ImageFileFormat::loadFrom(boxTex);
+    boxTexture.loadImage(boxImage);
 }
 
 void OpenGLComponent::renderOpenGL()
@@ -121,13 +109,14 @@ void OpenGLComponent::renderOpenGL()
     if (uniforms->viewMatrix.get() != nullptr)                              // [7]
         uniforms->viewMatrix->setMatrix4 (getViewMatrix().mat, 1, false);
 
-    cubeTexture.bind();
-    cube->draw(*attributes);
-    cubeTexture.unbind();
+    boxTexture.bind();
+    box->draw(*attributes);
+    boxTexture.unbind();
     
     glUniform1i(useTextureLoc, 0);
     
     instrumentOne->draw(*attributes);
+    instrumentTwo->draw(*attributes);
 
     // Reset the element buffers so child Components draw correctly
     glBindBuffer (GL_ARRAY_BUFFER, 0);                                      // [9]
@@ -207,18 +196,28 @@ void OpenGLComponent::createShaders()
           && newShader->addFragmentShader (juce::OpenGLHelpers::translateFragmentShaderToV3 (fragmentShader))
           && newShader->link())
     {
-        cube      .reset();
-        sphere    .reset();
-        circle    .reset();
+        box      .reset();
+        box      .reset (new Shape(boxFile, juce::Colours::transparentWhite));
+
+        sphereOne    .reset();
+        sphereTwo    .reset();
+        sphereOne    .reset (new Shape(sphereFile, juce::Colours::orange.withAlpha(0.65f)));
+        sphereTwo    .reset (new Shape(sphereFile, juce::Colours::blue.withAlpha(0.65f)));
+
+        shadowOne    .reset();
+        shadowTwo    .reset();
+        shadowOne    .reset (new Shape(circleFile, juce::Colours::transparentBlack.withAlpha(0.25f)));
+        shadowTwo    .reset (new Shape(circleFile, juce::Colours::transparentBlack.withAlpha(0.25f)));
+
         instrumentOne.reset();
+        instrumentTwo.reset();
+        instrumentOne.reset(new SphereAndShadow(sphereOne.get(), shadowOne.get()));
+        instrumentTwo.reset(new SphereAndShadow(sphereTwo.get(), shadowTwo.get()));
+
         attributes.reset();
         uniforms  .reset();
         shader.reset (newShader.release());                                                                 // [3]
-        shader->use();
-        cube      .reset (new Shape(cubeFile, juce::Colours::transparentWhite));
-        sphere    .reset (new Shape(sphereFile, juce::Colours::orange.withAlpha(0.65f)));       
-        circle    .reset (new Shape(circleFile, juce::Colours::transparentBlack.withAlpha(0.25f)));
-        instrumentOne.reset(new SphereAndShadow(sphere.get(), circle.get()));
+        shader->use();      
         attributes.reset (new Attributes (*shader));
         uniforms  .reset (new Uniforms (*shader));
         statusText = "GLSL: v" + juce::String (juce::OpenGLShaderProgram::getLanguageVersion(), 2);

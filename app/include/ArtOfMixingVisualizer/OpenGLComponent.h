@@ -167,13 +167,13 @@ private:
         Shape* shadow;
     };
 
-    juce::File cubeFile;
+    juce::File boxFile;
     juce::File sphereFile;
     juce::File circleFile;
 
-    juce::File cubeTex;
+    juce::File boxTex;
 
-    juce::OpenGLTexture cubeTexture;
+    juce::OpenGLTexture boxTexture;
     
     juce::String debug;
 
@@ -181,11 +181,15 @@ private:
     juce::String fragmentShader;
 
     std::unique_ptr<juce::OpenGLShaderProgram> shader;
-    std::unique_ptr<Shape> cube;
-    std::unique_ptr<Shape> sphere;
-    std::unique_ptr<Shape> circle;
+    std::unique_ptr<Shape> box;
 
+    std::unique_ptr<Shape> sphereOne;
+    std::unique_ptr<Shape> shadowOne;
     std::unique_ptr<SphereAndShadow> instrumentOne;
+
+    std::unique_ptr<Shape> sphereTwo;
+    std::unique_ptr<Shape> shadowTwo;
+    std::unique_ptr<SphereAndShadow> instrumentTwo;
     
     std::unique_ptr<Attributes> attributes;
     std::unique_ptr<Uniforms> uniforms;
