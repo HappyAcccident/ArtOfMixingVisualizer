@@ -16,6 +16,7 @@
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_opengl/juce_opengl.h>
 #include <ArtOfMixingVisualizer/WavefrontObjFile.h>
+#include <unordered_map>
 
 //==============================================================================
 /*
@@ -156,15 +157,26 @@ private:
         }
     };
 
+    struct Sphere : Shape
+    {
+        Sphere(juce::Colour color) : Shape(juce::File("C:/Users/nate/ArtOfMixing/app/resources/sphere.obj"), color) {}
+        float depth = 0.f;
+    };
+
+    struct Shadow : Shape
+    {
+        Shadow() : Shape(juce::File("C:/Users/nate/ArtOfMixing/app/resources/circle.obj"), 
+                         juce::Colours::transparentBlack.withAlpha(0.25f)) {}
+        int yOrder = 0;
+    };
+
     struct SphereAndShadow
     {
-        SphereAndShadow(Shape* sphere, Shape* shadow);
-
+        SphereAndShadow(Sphere* sphere, Shadow* shadow);
         void updateSphereAndShadow(const juce::Array<std::function<void(float&, float&)>>& transformations);
-        void draw(OpenGLComponent::Attributes &glAttributes);
     private:
-        Shape* sphere;
-        Shape* shadow;
+        Sphere* sphere;
+        Shadow* shadow;
     };
 
     juce::File boxFile;
@@ -182,17 +194,21 @@ private:
 
     std::unique_ptr<juce::OpenGLShaderProgram> shader;
     std::unique_ptr<Shape> box;
-
-    std::unique_ptr<Shape> sphereOne;
-    std::unique_ptr<Shape> shadowOne;
-    std::unique_ptr<SphereAndShadow> instrumentOne;
-
-    std::unique_ptr<Shape> sphereTwo;
-    std::unique_ptr<Shape> shadowTwo;
-    std::unique_ptr<SphereAndShadow> instrumentTwo;
     
+    std::array<std::unique_ptr<Sphere>, 5> spheres;
+    std::array<std::unique_ptr<Shadow>, 5> shadows;
+    std::array<std::unique_ptr<SphereAndShadow>, 5> instruments;
+    std::array<juce::Colour, 5> colors {juce::Colours::orange.withAlpha(0.25f),
+                                        juce::Colours::blue  .withAlpha(0.25f),
+                                        juce::Colours::green .withAlpha(0.25f),
+                                        juce::Colours::purple.withAlpha(0.25f),
+                                        juce::Colours::red   .withAlpha(0.25f)};
+    std::array<std::pair<Sphere*, float*>, 5> renderOrder;
+
     std::unique_ptr<Attributes> attributes;
     std::unique_ptr<Uniforms> uniforms;
+
+    int hz = 360;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OpenGLComponent);
 };

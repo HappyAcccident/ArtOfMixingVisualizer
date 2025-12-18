@@ -46,25 +46,56 @@ void OpenGLComponent::timerCallback()
 {
     frameCounter++;
 
-    auto transformOneX = [this](float& refX, float& posX) {posX = refX + cos((float) frameCounter * 0.01f);};
-    auto transformOneY = [this](float& refY, float& posY) {posY = refY + abs(sin((float) frameCounter * 0.1f)) - 0.725;};
-    auto transformOneZ = [this](float& refZ, float& posZ) {posZ = refZ + 2 * sin((float) frameCounter * 0.01f);};
-    juce::Array<std::function<void(float&, float&)>> transformationsOne = {transformOneX, transformOneY, transformOneZ};
+    float scale = 1.f;
+    auto transformOneX = [this, scale](float& refX, float& posX) {posX = scale*refX + cos((float) frameCounter/hz);};
+    auto transformOneY = [this, scale](float& refY, float& posY) {posY = scale*refY + abs(sin((float) 10*frameCounter/hz)) - 0.725;};
+    auto transformOneZ = [this, scale](float& refZ, float& posZ) {posZ = scale*refZ + 2 * sin((float) frameCounter/hz);};
+    juce::Array<std::function<void(float&, float&)>> transformationOne = {transformOneX, transformOneY, transformOneZ};
 
-    auto transformTwoX = [this](float& refX, float& posX) {posX = refX - cos((float) frameCounter * 0.01f);};
-    auto transformTwoY = [this](float& refY, float& posY) {posY = refY + abs(sin((float) frameCounter * 0.1f)) - 0.725;};
-    auto transformTwoZ = [this](float& refZ, float& posZ) {posZ = refZ - 2 * sin((float) frameCounter * 0.01f);};
-    juce::Array<std::function<void(float&, float&)>> transformationsTwo = {transformTwoX, transformTwoY, transformTwoZ};
+    auto transformTwoX = [this, scale](float& refX, float& posX) {posX = scale*refX + cos((float) frameCounter/hz + juce::MathConstants<float>::twoPi/5);};
+    auto transformTwoY = [this, scale](float& refY, float& posY) {posY = scale*refY + abs(sin((float) 10*frameCounter/hz)) - 0.725;};
+    auto transformTwoZ = [this, scale](float& refZ, float& posZ) {posZ = scale*refZ + 2 * sin((float) frameCounter/hz + juce::MathConstants<float>::twoPi/5);};
+    juce::Array<std::function<void(float&, float&)>> transformationTwo = {transformTwoX, transformTwoY, transformTwoZ};
 
-    instrumentOne->updateSphereAndShadow(transformationsOne);
-    instrumentTwo->updateSphereAndShadow(transformationsTwo);
+    auto transformThreeX = [this, scale](float& refX, float& posX) {posX = scale*refX + cos((float) frameCounter/hz + 2*juce::MathConstants<float>::twoPi/5);};
+    auto transformThreeY = [this, scale](float& refY, float& posY) {posY = scale*refY + abs(sin((float) 10*frameCounter/hz)) - 0.725;};
+    auto transformThreeZ = [this, scale](float& refZ, float& posZ) {posZ = scale*refZ + 2 * sin((float) frameCounter/hz + 2*juce::MathConstants<float>::twoPi/5);};
+    juce::Array<std::function<void(float&, float&)>> transformationThree = {transformThreeX, transformThreeY, transformThreeZ};
+
+    auto transformFourX = [this, scale](float& refX, float& posX) {posX = scale*refX + cos((float) frameCounter/hz + 3*juce::MathConstants<float>::twoPi/5);};
+    auto transformFourY = [this, scale](float& refY, float& posY) {posY = scale*refY + abs(sin((float) 10*frameCounter/hz)) - 0.725;};
+    auto transformFourZ = [this, scale](float& refZ, float& posZ) {posZ = scale*refZ + 2 * sin((float) frameCounter/hz + 3*juce::MathConstants<float>::twoPi/5);};
+    juce::Array<std::function<void(float&, float&)>> transformationFour = {transformFourX, transformFourY, transformFourZ};
+
+    auto transformFiveX = [this, scale](float& refX, float& posX) {posX = scale*refX + cos((float) frameCounter/hz + 4*juce::MathConstants<float>::twoPi/5);};
+    auto transformFiveY = [this, scale](float& refY, float& posY) {posY = scale*refY + abs(sin((float) 10*frameCounter/hz)) - 0.725;};
+    auto transformFiveZ = [this, scale](float& refZ, float& posZ) {posZ = scale*refZ + 2 * sin((float) frameCounter/hz + 4*juce::MathConstants<float>::twoPi/5);};
+    juce::Array<std::function<void(float&, float&)>> transformationFive = {transformFiveX, transformFiveY, transformFiveZ};
+
+    juce::Array<juce::Array<std::function<void(float&, float&)>>> transformations = {transformationOne, 
+                                                                                     transformationTwo,
+                                                                                     transformationThree,
+                                                                                     transformationFour,
+                                                                                     transformationFive};
+
+    for (int n = 0; n < 5; n++)
+    {
+        instruments[n]->updateSphereAndShadow(transformations[n]);
+    }
+
+    // std::cout << "[" << renderOrder[0].second << ", "
+    //                  << renderOrder[1].second << ", "
+    //                  << renderOrder[2].second << ", "
+    //                  << renderOrder[3].second << ", "
+    //                  << renderOrder[4].second << "]"
+    //                  << std::endl;
 }
 
 void OpenGLComponent::newOpenGLContextCreated()
 {
     using namespace ::juce::gl;
     createShaders();
-    startTimerHz(60);
+    startTimerHz(hz);
 
     boxTex = juce::File("C:/Users/nate/ArtOfMixing/app/resources/boxTex.png");
     juce::Image boxImage = juce::ImageFileFormat::loadFrom(boxTex);
@@ -114,9 +145,15 @@ void OpenGLComponent::renderOpenGL()
     boxTexture.unbind();
     
     glUniform1i(useTextureLoc, 0);
-    
-    instrumentOne->draw(*attributes);
-    instrumentTwo->draw(*attributes);
+    std::sort(renderOrder.begin(), renderOrder.end(), [](auto &left, auto &right) {return *left.second < *right.second;});
+    for (auto& sphere : renderOrder)
+    {
+        sphere.first->draw(*attributes);
+    }
+    for (int n = 0; n < 5; n++)
+    {
+        shadows[n]->draw(*attributes);
+    }
 
     // Reset the element buffers so child Components draw correctly
     glBindBuffer (GL_ARRAY_BUFFER, 0);                                      // [9]
@@ -199,21 +236,19 @@ void OpenGLComponent::createShaders()
         box      .reset();
         box      .reset (new Shape(boxFile, juce::Colours::transparentWhite));
 
-        sphereOne    .reset();
-        sphereTwo    .reset();
-        sphereOne    .reset (new Shape(sphereFile, juce::Colours::orange.withAlpha(0.65f)));
-        sphereTwo    .reset (new Shape(sphereFile, juce::Colours::blue.withAlpha(0.65f)));
-
-        shadowOne    .reset();
-        shadowTwo    .reset();
-        shadowOne    .reset (new Shape(circleFile, juce::Colours::transparentBlack.withAlpha(0.25f)));
-        shadowTwo    .reset (new Shape(circleFile, juce::Colours::transparentBlack.withAlpha(0.25f)));
-
-        instrumentOne.reset();
-        instrumentTwo.reset();
-        instrumentOne.reset(new SphereAndShadow(sphereOne.get(), shadowOne.get()));
-        instrumentTwo.reset(new SphereAndShadow(sphereTwo.get(), shadowTwo.get()));
-
+        for (int n = 0; n < 5; n++)
+        {
+            spheres[n].reset();
+            shadows[n].reset();
+            instruments[n].reset();
+            spheres[n].reset(new Sphere(colors[n]));
+            spheres[n].get()->depth = 0.f;
+            shadows[n].reset(new Shadow());
+            shadows[n].get()->yOrder = n;
+            instruments[n].reset(new SphereAndShadow(spheres[n].get(), shadows[n].get()));
+            renderOrder[n].first = spheres[n].get();
+            renderOrder[n].second = &renderOrder[n].first->depth;
+        }
         attributes.reset();
         uniforms  .reset();
         shader.reset (newShader.release());                                                                 // [3]
@@ -358,8 +393,8 @@ void OpenGLComponent::Shape::VertexBuffer::unbind()
 
 //==============================================================================
 
-OpenGLComponent::SphereAndShadow::SphereAndShadow(Shape* sphere, 
-                                                  Shape* shadow)
+OpenGLComponent::SphereAndShadow::SphereAndShadow(Sphere* sphere, 
+                                                  Shadow* shadow)
                                                   : sphere(sphere), 
                                                     shadow(shadow)
 {   
@@ -376,15 +411,16 @@ void OpenGLComponent::SphereAndShadow::updateSphereAndShadow(const juce::Array<s
     auto shadowFunction = [this, &transformations](OpenGLComponent::Vertex& referenceVertex, OpenGLComponent::Vertex& vertex)
     {
         transformations[0](referenceVertex.position[0], vertex.position[0]);
+        vertex.position[1] = referenceVertex.position[1] + shadow->yOrder * 0.01;
         transformations[2](referenceVertex.position[2], vertex.position[2]);
     };
 
+    float originRef = 0.f;
+    float originPos = 0.f;
+    transformations[2](originRef, originPos);
+    sphere->depth = originPos;
+    // std::cout << sphere->depth << std::endl;
+
     sphere->updateShape(sphereFunction);
     shadow->updateShape(shadowFunction);
-}
-
-void OpenGLComponent::SphereAndShadow::draw(OpenGLComponent::Attributes &glAttributes)
-{
-    sphere->draw(glAttributes);
-    shadow->draw(glAttributes);
 }
