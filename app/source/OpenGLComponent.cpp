@@ -11,8 +11,13 @@
 #include "ArtOfMixingVisualizer/OpenGLComponent.h"
 
 //==============================================================================
-OpenGLComponent::OpenGLComponent() : forwardFFT(fftOrder)
+OpenGLComponent::OpenGLComponent() : forwardFFT1(fftOrder),
+                                     forwardFFT2(fftOrder),
+                                     forwardFFT3(fftOrder),
+                                     forwardFFT4(fftOrder),
+                                     forwardFFT5(fftOrder)
 {
+    forwardFFTs = {&forwardFFT1, &forwardFFT2, &forwardFFT3, &forwardFFT4, &forwardFFT5};
     juce::OpenGLPixelFormat pixelFormat;
     pixelFormat.depthBufferBits = 24; // 24-bit depth buffer
     boxFile = juce::File("C:/Users/nate/ArtOfMixing/app/resources/box.obj");
@@ -45,7 +50,12 @@ void OpenGLComponent::resized()
 void OpenGLComponent::timerCallback()
 {
     frameCounter++;
-    std::cout << fifo[512] << std::endl;
+    // std::cout << "[" << fifos[0][512] << ", "
+    //                  << fifos[1][512] << ", "
+    //                  << fifos[2][512] << ", "
+    //                  << fifos[3][512] << ", "
+    //                  << fifos[4][512] << "]"
+    //                  << std::endl;
 }
 
 void OpenGLComponent::newOpenGLContextCreated()
@@ -260,21 +270,23 @@ void OpenGLComponent::createShaders()
 
 }
 
-void OpenGLComponent::pushNextSampleIntoFifo(float sample) noexcept
+//==============================================================================
+
+void OpenGLComponent::pushNextSampleIntoFifo(float sample, int instrument) noexcept
 {
     // if the fifo contains enough data, set a flag to say
     // that the next line should now be rendered..
-    if (fifoIndex == fftSize) // [8]
+    if (fifoIndexes[instrument] == fftSize) // [8]
     {
-        if (!nextFFTBlockReady) // [9]
+        if (!nextFFTBlockReadys[instrument]) // [9]
         {
-            std::fill (fftData.begin(), fftData.end(), 0.0f);
-            std::copy (fifo.begin(), fifo.end(), fftData.begin());
-            nextFFTBlockReady = true;
+            std::fill (fftDatas[instrument].begin(), fftDatas[instrument].end(), 0.0f);
+            std::copy (fifos[instrument].begin(), fifos[instrument].end(), fftDatas[instrument].begin());
+            nextFFTBlockReadys[instrument] = true;
         }
-        fifoIndex = 0;
+        fifoIndexes[instrument] = 0;
     }
-    fifo[(size_t) fifoIndex++] = sample; // [9]
+    fifos[instrument][(size_t) fifoIndexes[instrument]++] = sample; // [9]
 }
 
 //==============================================================================

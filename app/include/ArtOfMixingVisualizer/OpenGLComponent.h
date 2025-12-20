@@ -46,7 +46,7 @@ public:
     juce::Matrix3D<float> getShadowModelMatrix(int n , float scale) const;
     void createShaders();
 
-    void pushNextSampleIntoFifo(float sample) noexcept;
+    void pushNextSampleIntoFifo(float sample, int instrument) noexcept;
 private:
     int frameCounter = 0;
 
@@ -203,11 +203,16 @@ private:
 
     int hz = 60;
 
-    juce::dsp::FFT forwardFFT;
-    std::array<float, fftSize> fifo;
-    std::array<float, fftSize * 2> fftData;
-    int fifoIndex = 0;
-    bool nextFFTBlockReady = false;
+    juce::dsp::FFT forwardFFT1;
+    juce::dsp::FFT forwardFFT2;
+    juce::dsp::FFT forwardFFT3;
+    juce::dsp::FFT forwardFFT4;
+    juce::dsp::FFT forwardFFT5;
+    std::array<juce::dsp::FFT*, 5> forwardFFTs;
+    std::array<std::array<float, fftSize>, 5> fifos;
+    std::array<std::array<float, fftSize*2>, 5> fftDatas;
+    std::array<int, 5> fifoIndexes = {0, 0, 0, 0, 0};
+    std::array<bool, 5> nextFFTBlockReadys = {false, false, false, false, false};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OpenGLComponent);
 };

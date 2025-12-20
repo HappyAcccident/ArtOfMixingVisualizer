@@ -11,8 +11,9 @@
 class TappedSource : public juce::AudioSource
 {
 public:
-    TappedSource(juce::AudioTransportSource& s, OpenGLComponent& gl) : audioTransportSource(s), 
-                                                                       openGLComponent(gl) {}
+    TappedSource(juce::AudioTransportSource& s, OpenGLComponent& gl, int n) : audioTransportSource(s), 
+                                                                              openGLComponent(gl),
+                                                                              instrument(n) {}
 
     void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override
     {
@@ -32,11 +33,12 @@ public:
         {
             auto* data = info.buffer->getReadPointer(0, info.startSample);
             for (int i = 0; i < info.numSamples; ++i)
-                openGLComponent.pushNextSampleIntoFifo(data[i]);
+                openGLComponent.pushNextSampleIntoFifo(data[i], instrument);
         }
     }
 
 private:
     juce::AudioTransportSource& audioTransportSource;
     OpenGLComponent& openGLComponent;
+    int instrument;
 };
