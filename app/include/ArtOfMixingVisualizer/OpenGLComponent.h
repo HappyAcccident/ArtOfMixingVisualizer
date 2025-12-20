@@ -15,8 +15,11 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_opengl/juce_opengl.h>
+#include <juce_dsp/juce_dsp.h>
 #include <ArtOfMixingVisualizer/WavefrontObjFile.h>
-#include <unordered_map>
+
+static constexpr auto fftOrder = 10;
+static constexpr auto fftSize = 1 << fftOrder;
 
 //==============================================================================
 /*
@@ -33,16 +36,15 @@ public:
     void resized() override;
     void timerCallback() override;
 
-    int getFrameCounter() const {return frameCounter;};
-
     void newOpenGLContextCreated() override;
     void renderOpenGL() override;
     void openGLContextClosing() override;
 
     juce::Matrix3D<float> getProjectionMatrix() const;
     juce::Matrix3D<float> getViewMatrix() const;
+    juce::Matrix3D<float> getSphereModelMatrix(int n, float scale) const;
+    juce::Matrix3D<float> getShadowModelMatrix(int n , float scale) const;
     void createShaders();
-
 private:
     int frameCounter = 0;
 
@@ -85,7 +87,7 @@ private:
     {
         explicit Uniforms (juce::OpenGLShaderProgram& shaderProgram);
 
-        std::unique_ptr<juce::OpenGLShaderProgram::Uniform> projectionMatrix, viewMatrix;
+        std::unique_ptr<juce::OpenGLShaderProgram::Uniform> projectionMatrix, viewMatrix, modelMatrix;
 
     private:
         static juce::OpenGLShaderProgram::Uniform* createUniform (juce::OpenGLShaderProgram& shaderProgram,
@@ -159,7 +161,10 @@ private:
 
     struct Sphere : Shape
     {
-        Sphere(juce::Colour color) : Shape(juce::File("C:/Users/nate/ArtOfMixing/app/resources/sphere.obj"), color) {}
+        Sphere(juce::Colour color, int id) : Shape(juce::File("C:/Users/nate/ArtOfMixing/app/resources/sphere.obj"), color),
+                                             objID(id) 
+        {}
+        int objID;
         float depth = 0.f;
     };
 
@@ -168,15 +173,6 @@ private:
         Shadow() : Shape(juce::File("C:/Users/nate/ArtOfMixing/app/resources/circle.obj"), 
                          juce::Colours::transparentBlack.withAlpha(0.25f)) {}
         int yOrder = 0;
-    };
-
-    struct SphereAndShadow
-    {
-        SphereAndShadow(Sphere* sphere, Shadow* shadow);
-        void updateSphereAndShadow(const juce::Array<std::function<void(float&, float&)>>& transformations);
-    private:
-        Sphere* sphere;
-        Shadow* shadow;
     };
 
     juce::File boxFile;
@@ -197,18 +193,19 @@ private:
     
     std::array<std::unique_ptr<Sphere>, 5> spheres;
     std::array<std::unique_ptr<Shadow>, 5> shadows;
-    std::array<std::unique_ptr<SphereAndShadow>, 5> instruments;
-    std::array<juce::Colour, 5> colors {juce::Colours::orange.withAlpha(0.25f),
-                                        juce::Colours::blue  .withAlpha(0.25f),
-                                        juce::Colours::green .withAlpha(0.25f),
-                                        juce::Colours::purple.withAlpha(0.25f),
-                                        juce::Colours::red   .withAlpha(0.25f)};
+    std::array<juce::Colour, 5> colors;
     std::array<std::pair<Sphere*, float*>, 5> renderOrder;
 
     std::unique_ptr<Attributes> attributes;
     std::unique_ptr<Uniforms> uniforms;
 
-    int hz = 360;
+    int hz = 60;
+
+    juce::dsp::FFT forwardFFT;
+    std::array<float, fftSize> fifo;
+    std::array<float, fftSize * 2> fftData;
+    int fifoIndex = 0;
+    bool nextFFTBlockReady = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OpenGLComponent);
 };

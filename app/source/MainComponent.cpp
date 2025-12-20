@@ -73,7 +73,10 @@ void MainComponent::getNextAudioBlock(const juce::AudioSourceChannelInfo& buffer
         bufferToFill.clearActiveBufferRegion();
         return;
     }
-    mixer.getNextAudioBlock(bufferToFill);
+    if (bufferToFill.buffer->getNumChannels() > 0)
+    {
+        mixer.getNextAudioBlock(bufferToFill);
+    }
 }
 
 void MainComponent::prepareToPlay(int samplesPerBlockExpected, double sampleRate)

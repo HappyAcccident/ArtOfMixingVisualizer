@@ -11,7 +11,7 @@
 #include "ArtOfMixingVisualizer/OpenGLComponent.h"
 
 //==============================================================================
-OpenGLComponent::OpenGLComponent()
+OpenGLComponent::OpenGLComponent() : forwardFFT(fftOrder)
 {
     juce::OpenGLPixelFormat pixelFormat;
     pixelFormat.depthBufferBits = 24; // 24-bit depth buffer
@@ -46,49 +46,6 @@ void OpenGLComponent::timerCallback()
 {
     frameCounter++;
 
-    float scale = 1.f;
-    auto transformOneX = [this, scale](float& refX, float& posX) {posX = scale*refX + cos((float) frameCounter/hz);};
-    auto transformOneY = [this, scale](float& refY, float& posY) {posY = scale*refY + abs(sin((float) 10*frameCounter/hz)) - 0.725;};
-    auto transformOneZ = [this, scale](float& refZ, float& posZ) {posZ = scale*refZ + 2 * sin((float) frameCounter/hz);};
-    juce::Array<std::function<void(float&, float&)>> transformationOne = {transformOneX, transformOneY, transformOneZ};
-
-    auto transformTwoX = [this, scale](float& refX, float& posX) {posX = scale*refX + cos((float) frameCounter/hz + juce::MathConstants<float>::twoPi/5);};
-    auto transformTwoY = [this, scale](float& refY, float& posY) {posY = scale*refY + abs(sin((float) 10*frameCounter/hz)) - 0.725;};
-    auto transformTwoZ = [this, scale](float& refZ, float& posZ) {posZ = scale*refZ + 2 * sin((float) frameCounter/hz + juce::MathConstants<float>::twoPi/5);};
-    juce::Array<std::function<void(float&, float&)>> transformationTwo = {transformTwoX, transformTwoY, transformTwoZ};
-
-    auto transformThreeX = [this, scale](float& refX, float& posX) {posX = scale*refX + cos((float) frameCounter/hz + 2*juce::MathConstants<float>::twoPi/5);};
-    auto transformThreeY = [this, scale](float& refY, float& posY) {posY = scale*refY + abs(sin((float) 10*frameCounter/hz)) - 0.725;};
-    auto transformThreeZ = [this, scale](float& refZ, float& posZ) {posZ = scale*refZ + 2 * sin((float) frameCounter/hz + 2*juce::MathConstants<float>::twoPi/5);};
-    juce::Array<std::function<void(float&, float&)>> transformationThree = {transformThreeX, transformThreeY, transformThreeZ};
-
-    auto transformFourX = [this, scale](float& refX, float& posX) {posX = scale*refX + cos((float) frameCounter/hz + 3*juce::MathConstants<float>::twoPi/5);};
-    auto transformFourY = [this, scale](float& refY, float& posY) {posY = scale*refY + abs(sin((float) 10*frameCounter/hz)) - 0.725;};
-    auto transformFourZ = [this, scale](float& refZ, float& posZ) {posZ = scale*refZ + 2 * sin((float) frameCounter/hz + 3*juce::MathConstants<float>::twoPi/5);};
-    juce::Array<std::function<void(float&, float&)>> transformationFour = {transformFourX, transformFourY, transformFourZ};
-
-    auto transformFiveX = [this, scale](float& refX, float& posX) {posX = scale*refX + cos((float) frameCounter/hz + 4*juce::MathConstants<float>::twoPi/5);};
-    auto transformFiveY = [this, scale](float& refY, float& posY) {posY = scale*refY + abs(sin((float) 10*frameCounter/hz)) - 0.725;};
-    auto transformFiveZ = [this, scale](float& refZ, float& posZ) {posZ = scale*refZ + 2 * sin((float) frameCounter/hz + 4*juce::MathConstants<float>::twoPi/5);};
-    juce::Array<std::function<void(float&, float&)>> transformationFive = {transformFiveX, transformFiveY, transformFiveZ};
-
-    juce::Array<juce::Array<std::function<void(float&, float&)>>> transformations = {transformationOne, 
-                                                                                     transformationTwo,
-                                                                                     transformationThree,
-                                                                                     transformationFour,
-                                                                                     transformationFive};
-
-    for (int n = 0; n < 5; n++)
-    {
-        instruments[n]->updateSphereAndShadow(transformations[n]);
-    }
-
-    // std::cout << "[" << renderOrder[0].second << ", "
-    //                  << renderOrder[1].second << ", "
-    //                  << renderOrder[2].second << ", "
-    //                  << renderOrder[3].second << ", "
-    //                  << renderOrder[4].second << "]"
-    //                  << std::endl;
 }
 
 void OpenGLComponent::newOpenGLContextCreated()
@@ -139,19 +96,33 @@ void OpenGLComponent::renderOpenGL()
 
     if (uniforms->viewMatrix.get() != nullptr)                              // [7]
         uniforms->viewMatrix->setMatrix4 (getViewMatrix().mat, 1, false);
+    
+    auto identity = juce::Matrix3D<float>::Matrix3D();
+    if (uniforms->modelMatrix.get() != nullptr)
+        uniforms->modelMatrix->setMatrix4 (identity.mat, 1, false);
 
     boxTexture.bind();
     box->draw(*attributes);
     boxTexture.unbind();
     
     glUniform1i(useTextureLoc, 0);
+
+    float scale = 0.5f;
+    for (int n = 0; n < 5; n++)
+    {
+        spheres[n].get()->depth = getSphereModelMatrix(n, scale).mat[14];
+    }
     std::sort(renderOrder.begin(), renderOrder.end(), [](auto &left, auto &right) {return *left.second < *right.second;});
     for (auto& sphere : renderOrder)
     {
+        if (uniforms->modelMatrix.get() != nullptr)
+            uniforms->modelMatrix->setMatrix4 (getSphereModelMatrix(sphere.first->objID, scale).mat, 1, false);
         sphere.first->draw(*attributes);
     }
     for (int n = 0; n < 5; n++)
     {
+        if (uniforms->modelMatrix.get() != nullptr)
+            uniforms->modelMatrix->setMatrix4 (getShadowModelMatrix(n, scale).mat, 1 , false);
         shadows[n]->draw(*attributes);
     }
 
@@ -178,9 +149,33 @@ juce::Matrix3D<float> OpenGLComponent::getViewMatrix() const
 {
     auto viewMatrix = juce::Matrix3D<float>::fromTranslation ({ 0.0f, 0.0f, -10.0f });  // [4]
     auto rotationMatrix = viewMatrix.rotation ({ 0.0f,
-                                                 0.0f /* * (float) getFrameCounter() * 0.01f */,
-                                                 0.0f /* * (float) getFrameCounter() * 0.01f */});                        // [5]
+                                                 0.0f /* * (float) frameCounter * 0.01f */,
+                                                 0.0f /* * (float) frameCounter * 0.01f */});                        // [5]
     return viewMatrix * rotationMatrix;                                           // [6]
+}
+
+juce::Matrix3D<float> OpenGLComponent::getSphereModelMatrix(int n, float scale) const
+{
+    auto scaleMatrix = juce::Matrix3D<float>::Matrix3D({scale, 0.f,   0.f,   0.f,      
+                                                        0.f,   scale, 0.f,   0.f,
+                                                        0.f,   0.f,   scale, 0.f,
+                                                        0.f,   0.f,   0.f,   1.f});
+    auto translationMatrix = juce::Matrix3D<float>::fromTranslation({cos((float) frameCounter/hz + n*juce::MathConstants<float>::twoPi/5),
+                                                                     abs(sin((float) 10*frameCounter/hz)) - 0.725f,
+                                                                     2*sin((float) frameCounter/hz + n*juce::MathConstants<float>::twoPi/5)});
+    return translationMatrix * scaleMatrix;
+}
+
+juce::Matrix3D<float> OpenGLComponent::getShadowModelMatrix(int n, float scale) const
+{
+    auto scaleMatrix = juce::Matrix3D<float>::Matrix3D({scale, 0.f,   0.f,   0.f,      
+                                                        0.f,   1.f,   0.f,   0.f,
+                                                        0.f,   0.f,   scale, 0.f,
+                                                        0.f,   0.f,   0.f,   1.f});
+    auto translationMatrix = juce::Matrix3D<float>::fromTranslation({cos((float) frameCounter/hz + n*juce::MathConstants<float>::twoPi/5),
+                                                                     0.01f*n,
+                                                                     2*sin((float) frameCounter/hz + n*juce::MathConstants<float>::twoPi/5)});
+    return translationMatrix * scaleMatrix;
 }
 
 void OpenGLComponent::createShaders()
@@ -191,13 +186,14 @@ void OpenGLComponent::createShaders()
         attribute vec2 textureCoordIn;
         uniform mat4 projectionMatrix;
         uniform mat4 viewMatrix;
+        uniform mat4 modelMatrix;
         varying vec4 destinationColour;
         varying vec2 textureCoordOut;
         void main()
         {
             destinationColour = sourceColour;
             textureCoordOut = textureCoordIn;
-            gl_Position = projectionMatrix * viewMatrix * position;
+            gl_Position = projectionMatrix * viewMatrix * modelMatrix * position;
         })";
     fragmentShader =
        #if JUCE_OPENGL_ES
@@ -238,14 +234,13 @@ void OpenGLComponent::createShaders()
 
         for (int n = 0; n < 5; n++)
         {
+            colors[n] = juce::Colour::fromHSV(float(n)/5, 0.85f, 0.85f, 0.5f);
             spheres[n].reset();
             shadows[n].reset();
-            instruments[n].reset();
-            spheres[n].reset(new Sphere(colors[n]));
-            spheres[n].get()->depth = 0.f;
+            spheres[n].reset(new Sphere(colors[n], n));
+            spheres[n].get();
             shadows[n].reset(new Shadow());
-            shadows[n].get()->yOrder = n;
-            instruments[n].reset(new SphereAndShadow(spheres[n].get(), shadows[n].get()));
+            shadows[n].get();
             renderOrder[n].first = spheres[n].get();
             renderOrder[n].second = &renderOrder[n].first->depth;
         }
@@ -315,6 +310,7 @@ OpenGLComponent::Uniforms::Uniforms(juce::OpenGLShaderProgram& shaderProgram)
 {
     projectionMatrix.reset (createUniform (shaderProgram, "projectionMatrix"));
     viewMatrix      .reset (createUniform (shaderProgram, "viewMatrix"));
+    modelMatrix     .reset (createUniform (shaderProgram, "modelMatrix"));
 }
 
 //==============================================================================
@@ -339,18 +335,6 @@ void OpenGLComponent::Shape::draw (Attributes& glAttributes)
         glDrawElements (GL_TRIANGLES, vertexBuffer->indices.size(), GL_UNSIGNED_INT, nullptr);
         glAttributes.disable();
         vertexBuffer->unbind();
-    }
-}
-
-void OpenGLComponent::Shape::updateShape(const std::function<void(OpenGLComponent::Vertex&, OpenGLComponent::Vertex&)>& vertexFunction)
-{
-    for (int vB = 0; vB < referenceVertexBuffers.size(); vB++)
-    {
-        for (int v = 0; v < referenceVertexBuffers.getUnchecked(vB)->vertices.size(); v++)
-        {
-            vertexFunction(referenceVertexBuffers.getUnchecked(vB)->vertices.getReference(v), 
-                           vertexBuffers.getUnchecked(vB)->vertices.getReference(v));
-        }
     }
 }
 
@@ -389,38 +373,4 @@ void OpenGLComponent::Shape::VertexBuffer::unbind()
     using namespace ::juce::gl;
     glBindBuffer (GL_ARRAY_BUFFER, 0);
     glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, 0);
-}
-
-//==============================================================================
-
-OpenGLComponent::SphereAndShadow::SphereAndShadow(Sphere* sphere, 
-                                                  Shadow* shadow)
-                                                  : sphere(sphere), 
-                                                    shadow(shadow)
-{   
-}
-
-void OpenGLComponent::SphereAndShadow::updateSphereAndShadow(const juce::Array<std::function<void(float&, float&)>>& transformations)
-{
-    auto sphereFunction = [this, &transformations](OpenGLComponent::Vertex& referenceVertex, OpenGLComponent::Vertex& vertex)
-    {
-        for (int n = 0; n < 3; n++)
-            transformations[n](referenceVertex.position[n], vertex.position[n]);
-    };
-
-    auto shadowFunction = [this, &transformations](OpenGLComponent::Vertex& referenceVertex, OpenGLComponent::Vertex& vertex)
-    {
-        transformations[0](referenceVertex.position[0], vertex.position[0]);
-        vertex.position[1] = referenceVertex.position[1] + shadow->yOrder * 0.01;
-        transformations[2](referenceVertex.position[2], vertex.position[2]);
-    };
-
-    float originRef = 0.f;
-    float originPos = 0.f;
-    transformations[2](originRef, originPos);
-    sphere->depth = originPos;
-    // std::cout << sphere->depth << std::endl;
-
-    sphere->updateShape(sphereFunction);
-    shadow->updateShape(shadowFunction);
 }
