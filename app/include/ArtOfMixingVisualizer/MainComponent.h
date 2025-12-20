@@ -5,6 +5,7 @@
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_dsp/juce_dsp.h>
 #include "ArtOfMixingVisualizer/OpenGLComponent.h"
+#include "ArtOfMixingVisualizer/TappedSource.h"
 
 //==============================================================================
 /*
@@ -58,6 +59,8 @@ private:
     juce::AudioFormatManager formatManager;
     std::array<std::unique_ptr<juce::AudioFormatReaderSource>, 5> readerSources;
     std::array<std::unique_ptr<juce::AudioTransportSource>, 5> transportSources;
+    std::array<std::unique_ptr<TappedSource>, 5> tappedSources;
+
     juce::MixerAudioSource mixer;
     TransportState state;
 

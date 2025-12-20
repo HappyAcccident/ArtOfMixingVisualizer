@@ -8,7 +8,9 @@ MainComponent::MainComponent() : state (Stopped)
     {
         transportSources[n] = std::make_unique<juce::AudioTransportSource>();
         transportSources[n]->addChangeListener(this);
-        mixer.addInputSource(transportSources[n].get(), true);
+
+        tappedSources[n] = std::make_unique<TappedSource>(*transportSources[n].get(), openGLComponent);
+        mixer.addInputSource(tappedSources[n].get(), true);
 
         openButtons[n] = std::make_unique<juce::TextButton>();
         addAndMakeVisible(openButtons[n].get());

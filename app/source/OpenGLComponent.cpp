@@ -45,7 +45,7 @@ void OpenGLComponent::resized()
 void OpenGLComponent::timerCallback()
 {
     frameCounter++;
-
+    std::cout << fifo[512] << std::endl;
 }
 
 void OpenGLComponent::newOpenGLContextCreated()
@@ -258,6 +258,23 @@ void OpenGLComponent::createShaders()
     }
 
 
+}
+
+void OpenGLComponent::pushNextSampleIntoFifo(float sample) noexcept
+{
+    // if the fifo contains enough data, set a flag to say
+    // that the next line should now be rendered..
+    if (fifoIndex == fftSize) // [8]
+    {
+        if (!nextFFTBlockReady) // [9]
+        {
+            std::fill (fftData.begin(), fftData.end(), 0.0f);
+            std::copy (fifo.begin(), fifo.end(), fftData.begin());
+            nextFFTBlockReady = true;
+        }
+        fifoIndex = 0;
+    }
+    fifo[(size_t) fifoIndex++] = sample; // [9]
 }
 
 //==============================================================================

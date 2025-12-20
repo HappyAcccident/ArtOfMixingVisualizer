@@ -45,6 +45,8 @@ public:
     juce::Matrix3D<float> getSphereModelMatrix(int n, float scale) const;
     juce::Matrix3D<float> getShadowModelMatrix(int n , float scale) const;
     void createShaders();
+
+    void pushNextSampleIntoFifo(float sample) noexcept;
 private:
     int frameCounter = 0;
 
