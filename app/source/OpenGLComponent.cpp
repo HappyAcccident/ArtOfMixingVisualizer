@@ -51,63 +51,45 @@ void OpenGLComponent::timerCallback()
     {
         if (nextFFTBlockReadys[n])
         {
+            float leftAvg = 0.f;
+            float rightAvg = 0.f;
+            for (int i = 0; i < leftFifos[n].size(); i++)
+            {
+                leftAvg += std::abs(leftFifos[n][i]);
+                rightAvg += std::abs(rightFifos[n][i]);
+            }
+            leftAvg /= leftFifos.size();
+            rightAvg /= rightFifos.size();
+            spheres[n].get()->volume = (leftAvg + rightAvg)/2;
+            if (spheres[n].get()->volume != 0)
+                spheres[n].get()->pan = (rightAvg)/(leftAvg + rightAvg);
+            else
+                spheres[n].get()->pan = 0.5f;
             forwardFFT.performFrequencyOnlyForwardTransform(fftDatas[n].data());
             nextFFTBlockReadys[n] = false;
             analyzeFFT(fftDatas[n].data(), fftSize, 44100, n);
         }
     }
-    std::cout << "[" << freqRanges[0].first << ", " << freqRanges[0].second << "]" << std::endl;
 }
 
 void OpenGLComponent::analyzeFFT(const float* fftData, int fftSize, float sampleRate, int instrument)
 {
-    std::vector<float> power(fftSize/2);
-    float totalPower = 0.0f;
-    for (int i = 0; i < fftSize/2; ++i)
-    {
-        power[i] = fftData[i] * fftData[i];
-        totalPower += power[i];
-    }
-
-    if (totalPower <= 0.0f)
-    {
-        meanFreqs[instrument] = 0.f;
-        freqRanges[instrument].first, freqRanges[instrument].second = 0.f;
-    }
-
-    std::vector<float> cdf(fftSize/2);
-    float running = 0.0f;
-    for (int i = 0; i < fftSize/2; ++i)
-    {
-        running += power[i] / totalPower;
-        cdf[i] = running;
-    }
-
-    float lowerFreq = 0.0f;
-    float upperFreq = 0.0f;
-    for (int i = 0; i < fftSize/2; ++i)
-    {
-        float freq = i * sampleRate / fftSize;
-        if (cdf[i] >= 0.25f && lowerFreq == 0.0f)
-            lowerFreq = freq;
-        if (cdf[i] >= 0.75f)
-        {
-            upperFreq = freq;
-            break;
-        }
-    }
-
+    float sumPower = 0.0f;
     float weightedSum = 0.0f;
-    for (int i = 0; i < fftSize/2; ++i)
+
+    for (int i = 1; i < fftSize/2; ++i) // skip DC
     {
         float freq = i * sampleRate / fftSize;
-        weightedSum += freq * power[i];
-    }
-    float meanFreq = weightedSum / totalPower;
+        float mag = fftData[i];
+        float power = mag * mag; // energy weighting
 
-    meanFreqs[instrument] = meanFreq;
-    freqRanges[instrument].first = lowerFreq;
-    freqRanges[instrument].second = upperFreq;
+        weightedSum += freq * power;
+        sumPower += power;
+    }
+
+    float centroid = (sumPower > 0.0f) ? (weightedSum / sumPower) : 0.0f;
+
+    spheres[instrument].get()->meanFreq = centroid;
 }
 
 
@@ -146,19 +128,20 @@ float mapFrequencyToInterval(float freqHz)
     return juce::jmap(t, 0.0f, 1.0f, -1.5f, 1.5f);
 }
 
-float mapIntervalToRange(float lowerFreqHz, float upperFreqHz)
+float mapFrequencyToRadius(float freqHz)
 {
-    lowerFreqHz = juce::jlimit(20.0f, 20000.0f, lowerFreqHz);
-    upperFreqHz = juce::jlimit(20.0f, 20000.0f, upperFreqHz);
-    constexpr float minFreq = 20.0f;
-    constexpr float maxFreq = 20000.0f;
-    float logMin = std::log(minFreq);
-    float logMax = std::log(maxFreq);
-    float lowerLogFreq = std::log(lowerFreqHz);
-    float upperLogFreq = std::log(upperFreqHz);
-    float lowerT = (lowerFreqHz - logMin) / (logMax - logMin);
-    float upperT = (upperFreqHz - logMin) / (logMax - logMin);
-    return juce::jmap(upperT - lowerT, 0.0f, 1.0f, -1.5f, 1.5f);
+    auto f = [](float x) -> float {return -0.0828447*std::log(x)+0.805604;};
+    return 3*f(freqHz);
+}
+
+float mapPanToPosition(float pan)
+{
+    return 4.f*pan - 2.f;
+}
+
+float mapVolumeToPosition(float volume)
+{
+    return (8.f*volume)/77.f - 6.f;
 }
 
 void OpenGLComponent::newOpenGLContextCreated()
@@ -220,23 +203,24 @@ void OpenGLComponent::renderOpenGL()
     
     glUniform1i(useTextureLoc, 0);
 
-    float scale = 0.5f;
     for (int n = 0; n < 5; n++)
     {
-        spheres[n].get()->depth = getSphereModelMatrix(n, scale).mat[14];
+        spheres[n].get()->depth = getSphereModelMatrix(n).mat[14];
     }
     std::sort(renderOrder.begin(), renderOrder.end(), [](auto &left, auto &right) {return *left.second < *right.second;});
     for (auto& sphere : renderOrder)
     {
         if (uniforms->modelMatrix.get() != nullptr)
-            uniforms->modelMatrix->setMatrix4 (getSphereModelMatrix(sphere.first->objID, scale).mat, 1, false);
-        sphere.first->draw(*attributes);
+            uniforms->modelMatrix->setMatrix4 (getSphereModelMatrix(sphere.first->objID).mat, 1, false);
+        if (sphere.first->volume > 0.05)
+            sphere.first->draw(*attributes);
     }
     for (int n = 0; n < 5; n++)
     {
         if (uniforms->modelMatrix.get() != nullptr)
-            uniforms->modelMatrix->setMatrix4 (getShadowModelMatrix(n, scale).mat, 1 , false);
-        shadows[n]->draw(*attributes);
+            uniforms->modelMatrix->setMatrix4 (getShadowModelMatrix(n).mat, 1 , false);
+        if (spheres[n].get()->volume > 0.05)
+            shadows[n]->draw(*attributes);;
     }
 
     // Reset the element buffers so child Components draw correctly
@@ -267,27 +251,27 @@ juce::Matrix3D<float> OpenGLComponent::getViewMatrix() const
     return viewMatrix * rotationMatrix;                                           // [6]
 }
 
-juce::Matrix3D<float> OpenGLComponent::getSphereModelMatrix(int n, float scale) const
+juce::Matrix3D<float> OpenGLComponent::getSphereModelMatrix(int n) const
 {
-    auto scaleMatrix = juce::Matrix3D<float>::Matrix3D({scale, 0.f,   0.f,   0.f,      
-                                                        0.f,   scale, 0.f,   0.f,
-                                                        0.f,   0.f,   scale, 0.f,
+    auto scaleMatrix = juce::Matrix3D<float>::Matrix3D({mapFrequencyToRadius(spheres[n].get()->meanFreq), 0.f,   0.f,   0.f,      
+                                                        0.f,   mapFrequencyToRadius(spheres[n].get()->meanFreq), 0.f,   0.f,
+                                                        0.f,   0.f,   mapFrequencyToRadius(spheres[n].get()->meanFreq), 0.f,
                                                         0.f,   0.f,   0.f,   1.f});
-    auto translationMatrix = juce::Matrix3D<float>::fromTranslation({0.f,
-                                                                     mapFrequencyToInterval(meanFreqs[n]),
-                                                                     0.f});
+    auto translationMatrix = juce::Matrix3D<float>::fromTranslation({mapPanToPosition(spheres[n].get()->pan),
+                                                                     mapFrequencyToInterval(spheres[n].get()->meanFreq),
+                                                                     mapVolumeToPosition(spheres[n].get()->volume)});
     return translationMatrix * scaleMatrix;
 }
 
-juce::Matrix3D<float> OpenGLComponent::getShadowModelMatrix(int n, float scale) const
+juce::Matrix3D<float> OpenGLComponent::getShadowModelMatrix(int n) const
 {
-    auto scaleMatrix = juce::Matrix3D<float>::Matrix3D({scale, 0.f,   0.f,   0.f,      
+    auto scaleMatrix = juce::Matrix3D<float>::Matrix3D({mapFrequencyToRadius(spheres[n].get()->meanFreq), 0.f,   0.f,   0.f,      
                                                         0.f,   1.f,   0.f,   0.f,
-                                                        0.f,   0.f,   scale, 0.f,
+                                                        0.f,   0.f,   mapFrequencyToRadius(spheres[n].get()->meanFreq), 0.f,
                                                         0.f,   0.f,   0.f,   1.f});
-    auto translationMatrix = juce::Matrix3D<float>::fromTranslation({0.f,
+    auto translationMatrix = juce::Matrix3D<float>::fromTranslation({mapPanToPosition(spheres[n].get()->pan),
                                                                      0.005f*n,
-                                                                     0.f});
+                                                                     mapVolumeToPosition(spheres[n].get()->volume)});
     return translationMatrix * scaleMatrix;
 }
 

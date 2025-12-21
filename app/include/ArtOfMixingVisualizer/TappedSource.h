@@ -33,7 +33,7 @@ public:
         if (info.buffer->getNumChannels() > 0)
         {
             auto* leftData = info.buffer->getReadPointer(0, info.startSample);
-            auto* rightData = info.buffer->getReadPointer(0, info.startSample);
+            auto* rightData = info.buffer->getReadPointer(1, info.startSample);
             for (int i = 0; i < info.numSamples; ++i)
                 openGLComponent.pushNextSampleIntoFifos(leftData[i], rightData[i], instrument);
         }

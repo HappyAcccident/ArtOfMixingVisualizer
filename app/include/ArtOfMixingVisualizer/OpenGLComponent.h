@@ -42,8 +42,8 @@ public:
 
     juce::Matrix3D<float> getProjectionMatrix() const;
     juce::Matrix3D<float> getViewMatrix() const;
-    juce::Matrix3D<float> getSphereModelMatrix(int n, float scale) const;
-    juce::Matrix3D<float> getShadowModelMatrix(int n , float scale) const;
+    juce::Matrix3D<float> getSphereModelMatrix(int n) const;
+    juce::Matrix3D<float> getShadowModelMatrix(int n) const;
     void createShaders();
 
     void pushNextSampleIntoFifos(float leftSample, float rightSample, int instrument) noexcept;
@@ -114,6 +114,9 @@ private:
         void draw (Attributes& glAttributes);
         void updateShape (const std::function<void(OpenGLComponent::Vertex&, OpenGLComponent::Vertex&)>& vertexFunction);
 
+        float meanFreq = 0.f;
+        float volume = 0.f;
+        float pan = 0.5f;
     protected:
         struct VertexBuffer
         {
@@ -211,10 +214,5 @@ private:
     std::array<std::array<float, fftSize*2>, 5> fftDatas {};
     std::array<int, 5> fifoIndexes = {0, 0, 0, 0, 0};
     std::array<bool, 5> nextFFTBlockReadys = {false, false, false, false, false};
-
-    std::array<float, 5> meanFreqs;
-    /*lowerFreq, upperFreq*/
-    std::array<std::pair<float, float>, 5> freqRanges;
-
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OpenGLComponent);
 };
