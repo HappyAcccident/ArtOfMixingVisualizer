@@ -20,6 +20,7 @@
 
 static constexpr auto fftOrder = 10;
 static constexpr auto fftSize = 1 << fftOrder;
+static constexpr auto window = 5;
 
 //==============================================================================
 /*
@@ -114,9 +115,9 @@ private:
         void draw (Attributes& glAttributes);
         void updateShape (const std::function<void(OpenGLComponent::Vertex&, OpenGLComponent::Vertex&)>& vertexFunction);
 
-        float meanFreq = 0.f;
-        float volume = 0.f;
-        float pan = 0.5f;
+        std::array<float, window> lastMeanFreqs {};
+        std::array<float, window> lastVolumes {};
+        std::array<float, window> lastPans {};
     protected:
         struct VertexBuffer
         {
@@ -215,4 +216,6 @@ private:
     std::array<int, 5> fifoIndexes = {0, 0, 0, 0, 0};
     std::array<bool, 5> nextFFTBlockReadys = {false, false, false, false, false};
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OpenGLComponent);
+
+    std::array<float, window> totalVolumes {};
 };
