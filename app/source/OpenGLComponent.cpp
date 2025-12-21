@@ -9,15 +9,12 @@
 */
 
 #include "ArtOfMixingVisualizer/OpenGLComponent.h"
+#include <algorithm>
+#include <numeric>
 
 //==============================================================================
-OpenGLComponent::OpenGLComponent() : forwardFFT1(fftOrder),
-                                     forwardFFT2(fftOrder),
-                                     forwardFFT3(fftOrder),
-                                     forwardFFT4(fftOrder),
-                                     forwardFFT5(fftOrder)
+OpenGLComponent::OpenGLComponent() : forwardFFT(fftOrder)
 {
-    forwardFFTs = {&forwardFFT1, &forwardFFT2, &forwardFFT3, &forwardFFT4, &forwardFFT5};
     juce::OpenGLPixelFormat pixelFormat;
     pixelFormat.depthBufferBits = 24; // 24-bit depth buffer
     boxFile = juce::File("C:/Users/nate/ArtOfMixing/app/resources/box.obj");
@@ -50,12 +47,118 @@ void OpenGLComponent::resized()
 void OpenGLComponent::timerCallback()
 {
     frameCounter++;
-    // std::cout << "[" << fifos[0][512] << ", "
-    //                  << fifos[1][512] << ", "
-    //                  << fifos[2][512] << ", "
-    //                  << fifos[3][512] << ", "
-    //                  << fifos[4][512] << "]"
-    //                  << std::endl;
+    for (int n = 0; n < 5; n++)
+    {
+        if (nextFFTBlockReadys[n])
+        {
+            forwardFFT.performFrequencyOnlyForwardTransform(fftDatas[n].data());
+            nextFFTBlockReadys[n] = false;
+            analyzeFFT(fftDatas[n].data(), fftSize, 44100, n);
+        }
+    }
+    std::cout << "[" << freqRanges[0].first << ", " << freqRanges[0].second << "]" << std::endl;
+}
+
+void OpenGLComponent::analyzeFFT(const float* fftData, int fftSize, float sampleRate, int instrument)
+{
+    std::vector<float> power(fftSize/2);
+    float totalPower = 0.0f;
+    for (int i = 0; i < fftSize/2; ++i)
+    {
+        power[i] = fftData[i] * fftData[i];
+        totalPower += power[i];
+    }
+
+    if (totalPower <= 0.0f)
+    {
+        meanFreqs[instrument] = 0.f;
+        freqRanges[instrument].first, freqRanges[instrument].second = 0.f;
+    }
+
+    std::vector<float> cdf(fftSize/2);
+    float running = 0.0f;
+    for (int i = 0; i < fftSize/2; ++i)
+    {
+        running += power[i] / totalPower;
+        cdf[i] = running;
+    }
+
+    float lowerFreq = 0.0f;
+    float upperFreq = 0.0f;
+    for (int i = 0; i < fftSize/2; ++i)
+    {
+        float freq = i * sampleRate / fftSize;
+        if (cdf[i] >= 0.25f && lowerFreq == 0.0f)
+            lowerFreq = freq;
+        if (cdf[i] >= 0.75f)
+        {
+            upperFreq = freq;
+            break;
+        }
+    }
+
+    float weightedSum = 0.0f;
+    for (int i = 0; i < fftSize/2; ++i)
+    {
+        float freq = i * sampleRate / fftSize;
+        weightedSum += freq * power[i];
+    }
+    float meanFreq = weightedSum / totalPower;
+
+    meanFreqs[instrument] = meanFreq;
+    freqRanges[instrument].first = lowerFreq;
+    freqRanges[instrument].second = upperFreq;
+}
+
+
+//==============================================================================
+
+void OpenGLComponent::pushNextSampleIntoFifos(float leftSample, float rightSample, int instrument) noexcept
+{
+    // if the fifo contains enough data, set a flag to say
+    // that the next line should now be rendered..
+    if (fifoIndexes[instrument] == fftSize) // [8]
+    {
+        if (!nextFFTBlockReadys[instrument]) // [9]
+        {
+            std::fill (fftDatas[instrument].begin(), fftDatas[instrument].end(), 0.0f);
+            std::copy (monoFifos[instrument].begin(), monoFifos[instrument].end(), fftDatas[instrument].begin());
+            nextFFTBlockReadys[instrument] = true;
+        }
+        fifoIndexes[instrument] = 0;
+    }
+    auto idx = (size_t) fifoIndexes[instrument];
+    leftFifos[instrument][idx] = leftSample; // [9]
+    rightFifos[instrument][idx] = rightSample;
+    monoFifos[instrument][idx] = (leftSample + rightSample)/2;
+    fifoIndexes[instrument]++;
+}
+
+float mapFrequencyToInterval(float freqHz)
+{
+    freqHz = juce::jlimit(20.0f, 20000.0f, freqHz);
+    constexpr float minFreq = 20.0f;
+    constexpr float maxFreq = 20000.0f;
+    float logMin = std::log(minFreq);
+    float logMax = std::log(maxFreq);
+    float logFreq = std::log(freqHz);
+    float t = (logFreq - logMin) / (logMax - logMin);
+    return juce::jmap(t, 0.0f, 1.0f, -1.5f, 1.5f);
+}
+
+float mapIntervalToRange(float lowerFreqHz, float upperFreqHz)
+{
+    lowerFreqHz = juce::jlimit(20.0f, 20000.0f, lowerFreqHz);
+    upperFreqHz = juce::jlimit(20.0f, 20000.0f, upperFreqHz);
+    constexpr float minFreq = 20.0f;
+    constexpr float maxFreq = 20000.0f;
+    float logMin = std::log(minFreq);
+    float logMax = std::log(maxFreq);
+    float lowerLogFreq = std::log(lowerFreqHz);
+    float upperLogFreq = std::log(upperFreqHz);
+    float lowerT = (lowerFreqHz - logMin) / (logMax - logMin);
+    float upperT = (upperFreqHz - logMin) / (logMax - logMin);
+    return juce::jmap(upperT - lowerT, 0.0f, 1.0f, -1.5f, 1.5f);
 }
 
 void OpenGLComponent::newOpenGLContextCreated()
@@ -170,9 +273,9 @@ juce::Matrix3D<float> OpenGLComponent::getSphereModelMatrix(int n, float scale) 
                                                         0.f,   scale, 0.f,   0.f,
                                                         0.f,   0.f,   scale, 0.f,
                                                         0.f,   0.f,   0.f,   1.f});
-    auto translationMatrix = juce::Matrix3D<float>::fromTranslation({cos((float) frameCounter/hz + n*juce::MathConstants<float>::twoPi/5),
-                                                                     abs(sin((float) 10*frameCounter/hz)) - 0.725f,
-                                                                     2*sin((float) frameCounter/hz + n*juce::MathConstants<float>::twoPi/5)});
+    auto translationMatrix = juce::Matrix3D<float>::fromTranslation({0.f,
+                                                                     mapFrequencyToInterval(meanFreqs[n]),
+                                                                     0.f});
     return translationMatrix * scaleMatrix;
 }
 
@@ -182,9 +285,9 @@ juce::Matrix3D<float> OpenGLComponent::getShadowModelMatrix(int n, float scale) 
                                                         0.f,   1.f,   0.f,   0.f,
                                                         0.f,   0.f,   scale, 0.f,
                                                         0.f,   0.f,   0.f,   1.f});
-    auto translationMatrix = juce::Matrix3D<float>::fromTranslation({cos((float) frameCounter/hz + n*juce::MathConstants<float>::twoPi/5),
-                                                                     0.01f*n,
-                                                                     2*sin((float) frameCounter/hz + n*juce::MathConstants<float>::twoPi/5)});
+    auto translationMatrix = juce::Matrix3D<float>::fromTranslation({0.f,
+                                                                     0.005f*n,
+                                                                     0.f});
     return translationMatrix * scaleMatrix;
 }
 
@@ -268,25 +371,6 @@ void OpenGLComponent::createShaders()
     }
 
 
-}
-
-//==============================================================================
-
-void OpenGLComponent::pushNextSampleIntoFifo(float sample, int instrument) noexcept
-{
-    // if the fifo contains enough data, set a flag to say
-    // that the next line should now be rendered..
-    if (fifoIndexes[instrument] == fftSize) // [8]
-    {
-        if (!nextFFTBlockReadys[instrument]) // [9]
-        {
-            std::fill (fftDatas[instrument].begin(), fftDatas[instrument].end(), 0.0f);
-            std::copy (fifos[instrument].begin(), fifos[instrument].end(), fftDatas[instrument].begin());
-            nextFFTBlockReadys[instrument] = true;
-        }
-        fifoIndexes[instrument] = 0;
-    }
-    fifos[instrument][(size_t) fifoIndexes[instrument]++] = sample; // [9]
 }
 
 //==============================================================================

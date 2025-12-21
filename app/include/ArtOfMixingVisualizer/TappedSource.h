@@ -29,11 +29,13 @@ public:
     {
         audioTransportSource.getNextAudioBlock(info);
 
+        openGLComponent.pushNextSampleIntoFifos(0.f, 0.f, instrument);
         if (info.buffer->getNumChannels() > 0)
         {
-            auto* data = info.buffer->getReadPointer(0, info.startSample);
+            auto* leftData = info.buffer->getReadPointer(0, info.startSample);
+            auto* rightData = info.buffer->getReadPointer(0, info.startSample);
             for (int i = 0; i < info.numSamples; ++i)
-                openGLComponent.pushNextSampleIntoFifo(data[i], instrument);
+                openGLComponent.pushNextSampleIntoFifos(leftData[i], rightData[i], instrument);
         }
     }
 

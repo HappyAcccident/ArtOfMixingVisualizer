@@ -46,7 +46,8 @@ public:
     juce::Matrix3D<float> getShadowModelMatrix(int n , float scale) const;
     void createShaders();
 
-    void pushNextSampleIntoFifo(float sample, int instrument) noexcept;
+    void pushNextSampleIntoFifos(float leftSample, float rightSample, int instrument) noexcept;
+    void analyzeFFT(const float* fftData, int fftSize, float sampleRate, int instrument);
 private:
     int frameCounter = 0;
 
@@ -203,16 +204,17 @@ private:
 
     int hz = 60;
 
-    juce::dsp::FFT forwardFFT1;
-    juce::dsp::FFT forwardFFT2;
-    juce::dsp::FFT forwardFFT3;
-    juce::dsp::FFT forwardFFT4;
-    juce::dsp::FFT forwardFFT5;
-    std::array<juce::dsp::FFT*, 5> forwardFFTs;
-    std::array<std::array<float, fftSize>, 5> fifos;
-    std::array<std::array<float, fftSize*2>, 5> fftDatas;
+    juce::dsp::FFT forwardFFT;
+    std::array<std::array<float, fftSize>, 5> leftFifos {};
+    std::array<std::array<float, fftSize>, 5> rightFifos {};
+    std::array<std::array<float, fftSize>, 5> monoFifos {};
+    std::array<std::array<float, fftSize*2>, 5> fftDatas {};
     std::array<int, 5> fifoIndexes = {0, 0, 0, 0, 0};
     std::array<bool, 5> nextFFTBlockReadys = {false, false, false, false, false};
+
+    std::array<float, 5> meanFreqs;
+    /*lowerFreq, upperFreq*/
+    std::array<std::pair<float, float>, 5> freqRanges;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OpenGLComponent);
 };
