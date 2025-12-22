@@ -20,7 +20,7 @@
 
 static constexpr auto fftOrder = 10;
 static constexpr auto fftSize = 1 << fftOrder;
-static constexpr auto window = 5;
+static constexpr auto window = 2;
 
 //==============================================================================
 /*
@@ -47,6 +47,7 @@ public:
     juce::Matrix3D<float> getShadowModelMatrix(int n) const;
     void createShaders();
 
+    void processBlock(const juce::AudioSourceChannelInfo& info, int instrument);
     void pushNextSampleIntoFifos(float leftSample, float rightSample, int instrument) noexcept;
     void analyzeFFT(const float* fftData, int fftSize, float sampleRate, int instrument);
 private:
@@ -216,6 +217,4 @@ private:
     std::array<int, 5> fifoIndexes = {0, 0, 0, 0, 0};
     std::array<bool, 5> nextFFTBlockReadys = {false, false, false, false, false};
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OpenGLComponent);
-
-    std::array<float, window> totalVolumes {};
 };

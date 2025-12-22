@@ -65,38 +65,15 @@ float mean(const std::array<float, window>& last)
 void OpenGLComponent::timerCallback()
 {
     frameCounter++;
-    float totalVolume = 0;
     for (int n = 0; n < 5; n++)
     {
         if (nextFFTBlockReadys[n])
         {
-            float leftAvg = 0.f;
-            float rightAvg = 0.f;
-            for (int i = 0; i < leftFifos[n].size(); i++)
-            {
-                    leftAvg += std::abs(leftFifos[n][i]);
-                    rightAvg += std::abs(rightFifos[n][i]);
-            }
-            leftAvg /= leftFifos[n].size();
-            rightAvg /= rightFifos[n].size();
-            addValue(spheres[n].get()->lastVolumes, (leftAvg + rightAvg)/2);
-            if (leftAvg + rightAvg != 0)
-                addValue(spheres[n].get()->lastPans, rightAvg/(leftAvg + rightAvg));
-            else
-                addValue(spheres[n].get()->lastPans, rightAvg/(leftAvg + rightAvg));
             forwardFFT.performFrequencyOnlyForwardTransform(fftDatas[n].data());
             nextFFTBlockReadys[n] = false;
             analyzeFFT(fftDatas[n].data(), fftSize, 44100, n);
         }
-        totalVolume += spheres[n].get()->lastVolumes[window-1];
     }
-    addValue(totalVolumes, window);
-    // std::cout << "[";
-    // for (int i = 0; i < window-1; i++)
-    // {
-    //     std::cout << totalVolumes[i] << ", ";
-    // }
-    // std::cout << totalVolumes[window-1] << "]" << std::endl;
 }
 
 void OpenGLComponent::analyzeFFT(const float* fftData, int fftSize, float sampleRate, int instrument)
@@ -121,6 +98,34 @@ void OpenGLComponent::analyzeFFT(const float* fftData, int fftSize, float sample
 
 
 //==============================================================================
+
+void OpenGLComponent::processBlock(const juce::AudioSourceChannelInfo& info, int instrument)
+{
+    if (info.buffer->getNumChannels() > 0)
+    {
+        auto* leftData = info.buffer->getReadPointer(0, info.startSample);
+        auto* rightData = info.buffer->getReadPointer(1, info.startSample);
+        auto leftVolume = info.buffer->getRMSLevel(0, info.startSample, info.numSamples);
+        auto rightVolume = info.buffer->getRMSLevel(1, info.startSample, info.numSamples);
+        auto leftPower = leftVolume*leftVolume;
+        auto rightPower = rightVolume*rightVolume;
+        float monoVolume = std::sqrt(0.5f * (leftPower + rightPower));
+        addValue(spheres[instrument].get()->lastVolumes, monoVolume);
+        if (leftPower + rightPower != 0)
+            addValue(spheres[instrument].get()->lastPans, rightPower/(leftPower + rightPower));
+        else
+            addValue(spheres[instrument].get()->lastPans, 0.5f);
+
+        for (int i = 0; i < info.numSamples; ++i)
+            pushNextSampleIntoFifos(leftData[i], rightData[i], instrument);
+    }
+    else
+    {
+        addValue(spheres[instrument].get()->lastVolumes, 0.f);
+        addValue(spheres[instrument].get()->lastPans, 0.5f);
+        addValue(spheres[instrument].get()->lastMeanFreqs, 0.f);
+    }
+}
 
 void OpenGLComponent::pushNextSampleIntoFifos(float leftSample, float rightSample, int instrument) noexcept
 {
@@ -166,11 +171,9 @@ float mapPanToPosition(float pan)
     return 4.f*pan - 2.f;
 }
 
-float mapVolumeToPosition(float volume, float avgVolume)
+float mapVolumeToPosition(float volume)
 {
-    if (avgVolume != 0)
-        return (8.f*volume)/avgVolume - 6.f;
-    return 0.f;
+    return (16.f*std::sqrt(volume)) - 6.f;
 }
 
 void OpenGLComponent::newOpenGLContextCreated()
@@ -288,7 +291,7 @@ juce::Matrix3D<float> OpenGLComponent::getSphereModelMatrix(int n) const
                                                         0.f,   0.f,   0.f,   1.f});
     auto translationMatrix = juce::Matrix3D<float>::fromTranslation({mapPanToPosition(mean(spheres[n].get()->lastPans)),
                                                                      mapFrequencyToInterval(mean(spheres[n].get()->lastMeanFreqs)),
-                                                                     mapVolumeToPosition(mean(spheres[n].get()->lastVolumes), mean(totalVolumes))});
+                                                                     mapVolumeToPosition(mean(spheres[n].get()->lastVolumes))});
     return translationMatrix * scaleMatrix;
 }
 
@@ -300,7 +303,7 @@ juce::Matrix3D<float> OpenGLComponent::getShadowModelMatrix(int n) const
                                                         0.f,   0.f,   0.f,   1.f});
     auto translationMatrix = juce::Matrix3D<float>::fromTranslation({mapPanToPosition(mean(spheres[n].get()->lastPans)),
                                                                      0.005f*n,
-                                                                     mapVolumeToPosition(mean(spheres[n].get()->lastVolumes), mean(totalVolumes))});
+                                                                     mapVolumeToPosition(mean(spheres[n].get()->lastVolumes))});
     return translationMatrix * scaleMatrix;
 }
 
