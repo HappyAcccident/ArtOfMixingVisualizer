@@ -20,7 +20,7 @@
 
 static constexpr auto fftOrder = 10;
 static constexpr auto fftSize = 1 << fftOrder;
-static constexpr auto window = 5;
+static constexpr auto window = 3;
 
 //==============================================================================
 /*
@@ -216,6 +216,4 @@ private:
     std::array<int, 5> fifoIndexes = {0, 0, 0, 0, 0};
     std::array<bool, 5> nextFFTBlockReadys = {false, false, false, false, false};
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OpenGLComponent);
-
-    std::array<float, window> totalVolumes {};
 };

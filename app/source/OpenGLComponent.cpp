@@ -65,7 +65,6 @@ float mean(const std::array<float, window>& last)
 void OpenGLComponent::timerCallback()
 {
     frameCounter++;
-    float totalVolume = 0;
     for (int n = 0; n < 5; n++)
     {
         if (nextFFTBlockReadys[n])
@@ -88,15 +87,7 @@ void OpenGLComponent::timerCallback()
             nextFFTBlockReadys[n] = false;
             analyzeFFT(fftDatas[n].data(), fftSize, 44100, n);
         }
-        totalVolume += spheres[n].get()->lastVolumes[window-1];
     }
-    addValue(totalVolumes, window);
-    // std::cout << "[";
-    // for (int i = 0; i < window-1; i++)
-    // {
-    //     std::cout << totalVolumes[i] << ", ";
-    // }
-    // std::cout << totalVolumes[window-1] << "]" << std::endl;
 }
 
 void OpenGLComponent::analyzeFFT(const float* fftData, int fftSize, float sampleRate, int instrument)
@@ -166,11 +157,9 @@ float mapPanToPosition(float pan)
     return 4.f*pan - 2.f;
 }
 
-float mapVolumeToPosition(float volume, float avgVolume)
+float mapVolumeToPosition(float volume)
 {
-    if (avgVolume != 0)
-        return (8.f*volume)/avgVolume - 6.f;
-    return 0.f;
+    return (16.f*std::sqrt(volume)) - 6.f;
 }
 
 void OpenGLComponent::newOpenGLContextCreated()
@@ -288,7 +277,7 @@ juce::Matrix3D<float> OpenGLComponent::getSphereModelMatrix(int n) const
                                                         0.f,   0.f,   0.f,   1.f});
     auto translationMatrix = juce::Matrix3D<float>::fromTranslation({mapPanToPosition(mean(spheres[n].get()->lastPans)),
                                                                      mapFrequencyToInterval(mean(spheres[n].get()->lastMeanFreqs)),
-                                                                     mapVolumeToPosition(mean(spheres[n].get()->lastVolumes), mean(totalVolumes))});
+                                                                     mapVolumeToPosition(mean(spheres[n].get()->lastVolumes))});
     return translationMatrix * scaleMatrix;
 }
 
@@ -300,7 +289,7 @@ juce::Matrix3D<float> OpenGLComponent::getShadowModelMatrix(int n) const
                                                         0.f,   0.f,   0.f,   1.f});
     auto translationMatrix = juce::Matrix3D<float>::fromTranslation({mapPanToPosition(mean(spheres[n].get()->lastPans)),
                                                                      0.005f*n,
-                                                                     mapVolumeToPosition(mean(spheres[n].get()->lastVolumes), mean(totalVolumes))});
+                                                                     mapVolumeToPosition(mean(spheres[n].get()->lastVolumes))});
     return translationMatrix * scaleMatrix;
 }
 
